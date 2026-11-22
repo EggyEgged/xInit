@@ -77,6 +77,47 @@ run_tests() {  # run_tests <log> <cargo test args...>
     return "$rc"
 }
 
+SUITE="$(echo "$MILESTONE" | tr '[:upper:]' '[:lower:]')"   # M0 -> m0, boot -> boot
+
+suite_listed() {  # the frozen suite for this milestone is a real target with >= 1 test
+    # "Some tests passed" is not enough: unit tests in the crates could mask a
+    # suite that is missing or not compiled. Ask the suite itself.
+    local log="$LOGDIR/list.log" rc=0 n
+    cargo test --locked --test "$SUITE" -- --list > "$log" 2>"$LOGDIR/list.err" || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        cat "$LOGDIR/list.err" >&2
+        echo "test target '$SUITE' failed to build or list (exit $rc); expected entry file tests/$SUITE.rs" >&2
+        return 1
+    fi
+    n="$(grep -c ': test$' "$log" || true)"
+    echo "    tests/$SUITE.rs lists $n test(s)"
+    [[ "$n" -gt 0 ]] || { echo "test target '$SUITE' lists zero tests" >&2; return 1; }
+}
+
+tests_all_compiled() {  # every .rs file under tests/ is compiled into some test target
+    # A file under tests/<suite>/ that no mod declaration reaches is never built,
+    # so its tests vanish without an error. rustc's dep-info names every source
+    # file it read; any tests/*.rs missing from it is an orphan.
+    [[ -d tests ]] || { echo "    tests/ absent; nothing to check"; return 0; }
+    local exes used orphans
+    exes="$(cargo test --locked --no-run --message-format=json 2>/dev/null \
+        | jq -r 'select(.reason == "compiler-artifact" and (.package_id | test("xinit-tests")) and .target.kind == ["test"]) | .executable')" \
+        || { echo "cargo test --no-run failed" >&2; return 1; }
+    used="$(for exe in $exes; do
+                [[ -f "$exe.d" ]] || { echo "missing dep-info $exe.d" >&2; continue; }
+                head -1 "$exe.d" | cut -d: -f2- | tr ' ' '\n'
+            done | grep '\.rs$' \
+                 | xargs -r -d '\n' realpath -m --relative-to="$ROOT" \
+                 | LC_ALL=C sort -u)"   # normalises #[path = "../x"] entries such as tests/m0/../common/mod.rs
+    orphans="$(LC_ALL=C comm -23 <(find tests -type f -name '*.rs' | LC_ALL=C sort) <(printf '%s\n' "$used"))"
+    if [[ -n "$orphans" ]]; then
+        printf '    orphan (never compiled): %s\n' $orphans >&2
+        echo "declare each file as a module reachable from tests/<suite>.rs (see CLAUDE.md, Test layout)" >&2
+        return 1
+    fi
+    echo "    $(find tests -type f -name '*.rs' | grep -c . || true) file(s) under tests/, all compiled"
+}
+
 run_holdout() {  # copy the holdout package next to the workspace and test it
     [[ -f "$XINIT_HOLDOUT_DIR/Cargo.toml" ]] || { echo "$XINIT_HOLDOUT_DIR has no Cargo.toml (see specs/ARCHITECTURE.md, holdout contract)" >&2; return 1; }
     [[ -f "$XINIT_HOLDOUT_DIR/Cargo.lock" ]] || { echo "$XINIT_HOLDOUT_DIR has no Cargo.lock; --locked needs one" >&2; return 1; }
@@ -92,6 +133,8 @@ step "clippy" cargo clippy --locked --workspace --all-targets -- -D warnings
 step "hygiene" scripts/check-hygiene.sh
 step "frozen tests" scripts/check-frozen.sh
 step "cargo test" run_tests "$LOGDIR/test.log" --locked --workspace
+step "suite tests/$SUITE.rs" suite_listed
+step "no orphan test files" tests_all_compiled
 if [[ -n "${XINIT_HOLDOUT_DIR:-}" ]]; then
     step "holdout" run_holdout
 else

@@ -15,7 +15,14 @@ Architecture: Core is PID 1. It is small, synchronous, has no async runtime, and
 - Hygiene lint: scripts/check-hygiene.sh
 - Boot test (Debian phase only): scripts/qemu-boot-test.sh <image>
 
-## Invariants (each has a reason)
+## Test layout (Cargo only builds top-level files in tests/)
+- Each milestone has one entry file, tests/m<n>.rs (boot: tests/boot.rs), containing only `#[path = "m<n>/mod.rs"] mod m<n>;`. tests/m<n>/mod.rs declares the other files: `mod supervise;` -> tests/m<n>/supervise.rs.
+- A file that no `mod` reaches is never compiled. verify-milestone fails on such orphans, and fails if `cargo test --test m<n> -- --list` shows zero tests.
+- Shared helpers go in tests/common/mod.rs, reached with `#[path = "../common/mod.rs"] mod common;` from tests/m<n>/mod.rs. Do not add top-level tests/*.rs files other than the entry files.
+- The tests are owned by the root package xinit-tests. It depends only on xinit-api. Ask before adding a dev-dependency.
+- Blind test author: scripts/make-blind-workspace.sh <dir> outside the repo, then `cargo test --offline --test m<n>` there must build and fail (red).
+
+
 1. Core never exits and never panics. A PID 1 exit makes the kernel panic or tear down the namespace.
 2. Install a signal handler only for signals Core acts on. Signals to PID 1 without a handler are ignored by the kernel.
 3. Every unsafe block has a // SAFETY: comment. Every FFI declaration sits in an unsafe extern block (Rust 2024).

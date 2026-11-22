@@ -17,6 +17,8 @@
 - 2026-11-22: Feature files start as `[]`. The spec writer adds features; verify-milestone fails on an empty or malformed file.
 - 2026-11-22: `FROZEN` (repo root) lists frozen milestones, one per line, written by scripts/freeze-tests.sh. Once non-empty, check-frozen.sh requires tests/MANIFEST.sha256. verify-milestone M<n> fails until M<n> is in FROZEN.
 - 2026-11-22: verify-milestone fails if any test is ignored, as well as when zero tests run.
+- 2026-11-22: The workspace root is also the package `xinit-tests`, which owns tests/. It has one entry file per milestone (tests/m<n>.rs), inherits workspace lints but not the no-panic forbid, and depends only on xinit-api. verify-milestone lists the milestone's suite and checks for orphan files. See specs/ARCHITECTURE.md, Test suite layout.
+- 2026-11-22: The blind test workspace is built by scripts/make-blind-workspace.sh rather than ad hoc sed commands, and fails if the Cargo.toml shape changes.
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
 - 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 
@@ -37,4 +39,10 @@
   - clippy rejects: unwrap after a `#[cfg(test)]` + `"{"` decoy (which the old grep missed), a local `#[allow(clippy::unwrap_used, reason)]` (E0453), `#[allow]` without a reason, and `panic!` in Manager.
   - clippy accepts: unwrap inside a `#[cfg(test)]` module.
   - check-hygiene rejects: the crate-root attribute removed, and a crate missing `[lints] workspace = true`.
-  - OPEN DEFECT: files in the root `tests/` are never compiled. The workspace root is virtual, so no package owns them. A test there did not run; cargo test reported 0 passed. Must be fixed before M0 tests are written.
+  - FIXED in the next entry. Was: files in the root `tests/` are never compiled. The workspace root is virtual, so no package owns them. A test there did not run; cargo test reported 0 passed. Must be fixed before M0 tests are written.
+- 2026-11-22 root test package: tested on a scratch copy with a planted feature, an API stub and tests/m0.rs + tests/m0/{mod,ping}.rs + tests/common/mod.rs.
+  - Blind workspace: `cargo test --offline --test m0` built and failed red ("not implemented", exit 101).
+  - After implementing the stub, verify-milestone M0 printed RESULT: PASSED (m0 listed 1 test; 4 files under tests/, all compiled).
+  - An unreached tests/m0/forgotten.rs failed the gate as an orphan.
+  - Removing tests/m0.rs while a crate unit test still passed failed the gate at `suite tests/m0.rs`.
+  - Real repository, verify-milestone M0: exit 1, RESULT: FAILED (4): features/M0.json, frozen M0, suite tests/m0.rs, zero tests ran.

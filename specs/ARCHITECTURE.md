@@ -7,6 +7,7 @@ Normative behaviour belongs in per-milestone specs. This file records structural
 |---|---|---|
 | `xinit-api` | lib | Public types and function signatures shared by Core, Manager and tests. The spec writer adds signatures with `unimplemented!()` bodies. |
 | `xinit-core` | bin `xrginit` | Core: PID 1 path, signal handling, child reaping, Manager supervision, degraded-mode shutdown. |
+| `xinit-tests` (repo root) | lib placeholder + tests/ | Owns the frozen suite. Depends on `xinit-api` only. Workspace lints apply, the no-panic forbid does not. |
 | `xinit-manager` | lib | Manager: unit loading, service supervision, re-adoption from `/sys/fs/cgroup/xinit/<unit>` and `/run/xinit/state`. |
 
 ## Decision: Manager is a subcommand of the same binary
@@ -25,3 +26,22 @@ Constraint this creates: everything in `xinit-core/src` runs in PID 1. Manager l
 - a committed `Cargo.lock` (the run uses `--locked`).
 
 verify-milestone copies it to `target/xinit-holdout/` (so the relative paths resolve to this repository) and runs `cargo test --locked` there. Zero holdout tests count toward the zero-tests failure.
+
+## Test suite layout
+Cargo builds only top-level `tests/*.rs` (and `tests/*/main.rs`) as test targets. In a virtual workspace it builds none of them. So the workspace root is also the `xinit-tests` package, and each milestone has one entry file:
+
+```
+tests/m0.rs            #[path = "m0/mod.rs"] mod m0;
+tests/m0/mod.rs        mod supervise; mod reap; #[path = "../common/mod.rs"] mod common;
+tests/m0/supervise.rs
+tests/common/mod.rs    shared helpers
+```
+
+verify-milestone M<n> proves the suite ran:
+- `cargo test --test m<n> -- --list` must exit 0 and list at least one test.
+- Every `tests/**/*.rs` must appear in rustc's dep-info for some test target of `xinit-tests`. A file no `mod` reaches fails as an orphan.
+
+Open question for the M0 spec: integration tests in `xinit-tests` cannot use `env!("CARGO_BIN_EXE_xrginit")`, because that variable exists only for binaries of the same package. Tests that run the binary need a decided way to find it.
+
+## Blind workspace
+`scripts/make-blind-workspace.sh <dest>` copies the root package (Cargo.toml with members cut to `.` and `crates/xinit-api`, `src/lib.rs`, `tests/`), `crates/xinit-api`, `specs/`, `features/`, `CLAUDE.md`, `Cargo.lock` and `rust-toolchain.toml`. Core and Manager source are left out. The red check there is `cargo test --offline --test m<n>`.

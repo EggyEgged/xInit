@@ -20,3 +20,10 @@ version = "0.0.0"
 dependencies = [
  "xinit-api",
 ]
+
+[[package]]
+name = "xinit-tests"
+version = "0.0.0"
+dependencies = [
+ "xinit-api",
+]

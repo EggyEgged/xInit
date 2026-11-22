@@ -41,7 +41,7 @@ for f in "${CRATE_ROOTS[@]}"; do
 done
 grep -qE '^allow_attributes_without_reason *= *"(deny|forbid)"' "$ROOT/Cargo.toml" \
     || report 'workspace no longer denies clippy::allow_attributes_without_reason' "$ROOT/Cargo.toml"
-for toml in "$ROOT"/crates/*/Cargo.toml; do
+for toml in "$ROOT/Cargo.toml" "$ROOT"/crates/*/Cargo.toml; do
     tr -d ' \n\t' < "$toml" | grep -q '\[lints\]workspace=true' \
         || report 'crate does not inherit workspace lints ([lints] workspace = true)' "$toml"
 done

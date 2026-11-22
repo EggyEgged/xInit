@@ -1,6 +1,36 @@
+# The root package owns tests/: Cargo only builds tests that belong to a package,
+# so without this the frozen suite in tests/ would never be compiled.
+# It gets workspace lints only, not the no-panic forbid of Core and Manager:
+# tests unwrap and panic on purpose.
+[package]
+name = "xinit-tests"
+description = "Owner of the frozen test suite in tests/. Holds no code."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autobins = false
+autoexamples = false
+autobenches = false
+
+[lib]
+# A package needs one non-test target, or it fails to build while tests/ is empty.
+path = "src/lib.rs"
+test = false
+doctest = false
+
+[dependencies]
+xinit-api.workspace = true
+
+[lints]
+workspace = true
+
 [workspace]
 resolver = "3"
-members = ["crates/xinit-api", "crates/xinit-core", "crates/xinit-manager"]
+# scripts/make-blind-workspace.sh rewrites these two lines; keep each on one line.
+members = [".", "crates/xinit-api", "crates/xinit-core", "crates/xinit-manager"]
+default-members = [".", "crates/xinit-api", "crates/xinit-core", "crates/xinit-manager"]
 
 [workspace.package]
 version = "0.0.0"
@@ -11,7 +41,7 @@ publish = false
 
 [workspace.dependencies]
 xinit-api = { path = "crates/xinit-api" }
-xinit-manager = { path = "crates/xinit-manager" }
+xinit-manager = { path = "crates/xinit-manager" } # blind-drop
 
 # Every #[allow] must say why: #[allow(lint, reason = "...")].
 [workspace.lints.clippy]
