@@ -54,6 +54,6 @@ Architecture: Core is PID 1. It is small, synchronous, has no async runtime, and
 ## Git and GitHub
 - Work on a branch, never directly on main: m<n>/<step>, for example m0/stub, m0/tests, m0/impl.
 - When the task's done_when is met and its checks pass, commit with the message the prompt gives, push the branch to origin, and open a pull request with gh pr create. Put the task's report in the pull request body.
-- Do not merge pull requests. The human merges after CI passes and they have read the report.
+- Do not merge pull requests, unless you are the autopilot session, which merges only after CI passes.
 - Never force-push, never push to main, never use --no-verify.
 - If a push or gh command fails, report the exact error and stop. Do not retry with different flags.
