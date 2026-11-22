@@ -19,6 +19,7 @@ Architecture: Core is PID 1. It is small, synchronous, has no async runtime, and
 - Each milestone has one entry file, tests/m<n>.rs (boot: tests/boot.rs), containing only `#[path = "m<n>/mod.rs"] mod m<n>;`. tests/m<n>/mod.rs declares the other files: `mod supervise;` -> tests/m<n>/supervise.rs.
 - A file that no `mod` reaches is never compiled. verify-milestone fails on such orphans, and fails if `cargo test --test m<n> -- --list` shows zero tests.
 - Shared helpers go in tests/common/mod.rs, reached with `#[path = "../common/mod.rs"] mod common;` from tests/m<n>/mod.rs. Do not add top-level tests/*.rs files other than the entry files.
+- Tests that run the binary find it only through XRGINIT_BIN, an absolute path set by the harness. Use the helper `xrginit_bin()` in tests/common/mod.rs. If XRGINIT_BIN is unset or not an executable file, it panics with a message that names the variable. Never fall back to a guessed path such as target/debug/xrginit.
 - The tests are owned by the root package xinit-tests. It depends only on xinit-api. Ask before adding a dev-dependency.
 - Blind test author: scripts/make-blind-workspace.sh <dir> outside the repo, then `cargo test --offline --test m<n>` there must build and fail (red).
 

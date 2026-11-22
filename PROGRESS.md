@@ -19,6 +19,7 @@
 - 2026-11-22: verify-milestone fails if any test is ignored, as well as when zero tests run.
 - 2026-11-22: The workspace root is also the package `xinit-tests`, which owns tests/. It has one entry file per milestone (tests/m<n>.rs), inherits workspace lints but not the no-panic forbid, and depends only on xinit-api. verify-milestone lists the milestone's suite and checks for orphan files. See specs/ARCHITECTURE.md, Test suite layout.
 - 2026-11-22: The blind test workspace is built by scripts/make-blind-workspace.sh rather than ad hoc sed commands, and fails if the Cargo.toml shape changes.
+- 2026-11-22: Tests find the binary only through XRGINIT_BIN (absolute path), read by the helper `xrginit_bin()` in tests/common/mod.rs, which panics loudly if it is unusable. There is no fallback path. See specs/ARCHITECTURE.md.
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
 - 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 

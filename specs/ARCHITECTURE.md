@@ -41,7 +41,21 @@ verify-milestone M<n> proves the suite ran:
 - `cargo test --test m<n> -- --list` must exit 0 and list at least one test.
 - Every `tests/**/*.rs` must appear in rustc's dep-info for some test target of `xinit-tests`. A file no `mod` reaches fails as an orphan.
 
-Open question for the M0 spec: integration tests in `xinit-tests` cannot use `env!("CARGO_BIN_EXE_xrginit")`, because that variable exists only for binaries of the same package. Tests that run the binary need a decided way to find it.
+### Finding the xrginit binary: XRGINIT_BIN
+Integration tests in `xinit-tests` cannot use `env!("CARGO_BIN_EXE_xrginit")`. Cargo sets that variable only for tests in the binary's own package, which is `xinit-core`. Instead:
+
+- The harness sets `XRGINIT_BIN` to the absolute path of the built `xrginit` binary.
+- Tests get the path only through one helper in `tests/common/mod.rs`, written by the test author and frozen with the suite:
+
+  ```rust
+  /// Path to the xrginit binary under test, from XRGINIT_BIN.
+  pub fn xrginit_bin() -> std::path::PathBuf
+  ```
+
+  It reads `XRGINIT_BIN` at run time, not with `env!`, so the blind workspace still compiles. It panics with a message naming `XRGINIT_BIN` when the variable is unset, the path is relative, or the path is not an executable file.
+- No fallback to `target/debug/xrginit` or `$PATH`. A guess can pick up a stale or wrong binary and make a test pass against the wrong code. A test that cannot find the binary must fail and say why.
+- In the blind workspace there is no binary, so tests that need it fail red at the helper. That is the expected red result.
+
 
 ## Blind workspace
 `scripts/make-blind-workspace.sh <dest>` copies the root package (Cargo.toml with members cut to `.` and `crates/xinit-api`, `src/lib.rs`, `tests/`), `crates/xinit-api`, `specs/`, `features/`, `CLAUDE.md`, `Cargo.lock` and `rust-toolchain.toml`. Core and Manager source are left out. The red check there is `cargo test --offline --test m<n>`.
