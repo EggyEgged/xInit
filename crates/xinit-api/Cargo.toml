@@ -1,0 +1,10 @@
+[package]
+name = "xinit-api"
+description = "Public types and function signatures shared by xrginit Core and Manager."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

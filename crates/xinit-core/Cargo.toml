@@ -1,0 +1,16 @@
+[package]
+name = "xinit-core"
+description = "xrginit: the xInit Core (PID 1) binary."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "xrginit"
+path = "src/main.rs"
+
+[dependencies]
+xinit-api.workspace = true
+xinit-manager.workspace = true

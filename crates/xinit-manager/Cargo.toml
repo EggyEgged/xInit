@@ -1,0 +1,11 @@
+[package]
+name = "xinit-manager"
+description = "The xInit Manager, run as `xrginit manager` in a child of Core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+xinit-api.workspace = true
