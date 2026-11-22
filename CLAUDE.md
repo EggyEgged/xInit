@@ -11,6 +11,7 @@ Architecture: Core is PID 1. It is small, synchronous, has no async runtime, and
 - Musl build: cargo build --locked --target x86_64-unknown-linux-musl
 - Full gate for a milestone: scripts/verify-milestone.sh M<n>
 - One test: cargo test --locked -p xinit-core <name> -- --exact
+- Tests that run the binary, outside the gate: cargo build --locked -p xinit-core && XRGINIT_BIN="$PWD/target/debug/xrginit" cargo test --locked --test m<n>
 - Frozen-test check: scripts/check-frozen.sh
 - Hygiene lint: scripts/check-hygiene.sh
 - Boot test (Debian phase only): scripts/qemu-boot-test.sh <image>

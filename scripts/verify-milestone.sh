@@ -79,6 +79,29 @@ run_tests() {  # run_tests <log> <cargo test args...>
 
 SUITE="$(echo "$MILESTONE" | tr '[:upper:]' '[:lower:]')"   # M0 -> m0, boot -> boot
 
+# Tests find the binary only through XRGINIT_BIN (see specs/ARCHITECTURE.md).
+# Never trust a value from the caller's shell: a leftover export points at a
+# stale binary and gives a false green. The gate always builds and sets it.
+unset XRGINIT_BIN
+
+build_xrginit() {  # build xrginit (dev profile, --locked) and export its absolute path
+    local json exe
+    # json-render-diagnostics: artifacts as JSON on stdout, compiler errors readable on stderr.
+    if ! json="$(cargo build --locked -p xinit-core --bin xrginit --message-format=json-render-diagnostics)"; then
+        echo "command 'cargo build --locked -p xinit-core --bin xrginit' failed" >&2
+        return 1
+    fi
+    # Take the path from cargo's own artifact record, not from a guessed target/ layout.
+    exe="$(printf '%s\n' "$json" | jq -r 'select(.reason == "compiler-artifact" and .target.name == "xrginit" and (.target.kind | index("bin"))) | .executable // empty' | tail -n 1)"
+    if [[ -z "$exe" || "$exe" != /* || ! -x "$exe" ]]; then
+        echo "cargo reported no usable xrginit executable (got '${exe:-nothing}')" >&2
+        return 1
+    fi
+    export XRGINIT_BIN="$exe"
+    echo "    XRGINIT_BIN=$XRGINIT_BIN"
+    echo "    sha256=$(sha256sum "$XRGINIT_BIN" | cut -d' ' -f1)"
+}
+
 suite_listed() {  # the frozen suite for this milestone is a real target with >= 1 test
     # "Some tests passed" is not enough: unit tests in the crates could mask a
     # suite that is missing or not compiled. Ask the suite itself.
@@ -132,20 +155,35 @@ step "fmt" cargo fmt --all --check
 step "clippy" cargo clippy --locked --workspace --all-targets -- -D warnings
 step "hygiene" scripts/check-hygiene.sh
 step "frozen tests" scripts/check-frozen.sh
-step "cargo test" run_tests "$LOGDIR/test.log" --locked --workspace
-step "suite tests/$SUITE.rs" suite_listed
-step "no orphan test files" tests_all_compiled
-if [[ -n "${XINIT_HOLDOUT_DIR:-}" ]]; then
-    step "holdout" run_holdout
+tests_ran=0
+step "build xrginit" build_xrginit
+if [[ -z "${XRGINIT_BIN:-}" ]]; then
+    # Without a fresh binary every binary test would fail at xrginit_bin() and
+    # bury the real cause, so stop here and report the build failure alone.
+    echo "==> tests: NOT RUN (xrginit did not build; see 'build xrginit' above)" >&2
 else
-    echo "==> holdout: SKIPPED (XINIT_HOLDOUT_DIR is not set)"
+    tests_ran=1
+    step "cargo test" run_tests "$LOGDIR/test.log" --locked --workspace
+    step "suite tests/$SUITE.rs" suite_listed
+    step "no orphan test files" tests_all_compiled
+    if [[ -n "${XINIT_HOLDOUT_DIR:-}" ]]; then
+        echo "    holdout uses the same XRGINIT_BIN=$XRGINIT_BIN"
+        step "holdout" run_holdout
+    else
+        echo "==> holdout: SKIPPED (XINIT_HOLDOUT_DIR is not set)"
+    fi
 fi
 
 echo
 echo "==== verify-milestone $MILESTONE summary ===="
-echo "tests: passed=$total_passed failed=$total_failed ignored=$total_ignored"
-if [[ $total_passed -eq 0 && $total_failed -eq 0 ]]; then
-    failed_steps+=("zero tests ran")
+echo "binary: ${XRGINIT_BIN:-none (build failed)}"
+if [[ $tests_ran -eq 0 ]]; then
+    echo "tests: NOT RUN"
+else
+    echo "tests: passed=$total_passed failed=$total_failed ignored=$total_ignored"
+    if [[ $total_passed -eq 0 && $total_failed -eq 0 ]]; then
+        failed_steps+=("zero tests ran")
+    fi
 fi
 if [[ $total_ignored -gt 0 ]]; then
     failed_steps+=("$total_ignored ignored test(s); ignoring a test is forbidden")

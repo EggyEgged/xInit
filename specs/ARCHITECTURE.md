@@ -44,7 +44,13 @@ verify-milestone M<n> proves the suite ran:
 ### Finding the xrginit binary: XRGINIT_BIN
 Integration tests in `xinit-tests` cannot use `env!("CARGO_BIN_EXE_xrginit")`. Cargo sets that variable only for tests in the binary's own package, which is `xinit-core`. Instead:
 
-- The harness sets `XRGINIT_BIN` to the absolute path of the built `xrginit` binary.
+- `verify-milestone.sh` sets `XRGINIT_BIN`:
+  - It clears any value inherited from the caller's shell.
+  - It runs `cargo build --locked -p xinit-core --bin xrginit` in the dev profile, the same profile the tests use.
+  - It sets `XRGINIT_BIN` to the executable path cargo reports, and prints that path and its sha256 in the gate output.
+  - If the build fails, the gate reports that and runs no tests.
+  - The holdout suite inherits the same `XRGINIT_BIN`.
+  - Testing a musl binary would need an explicit gate option that builds it. The gate never takes a binary from the environment.
 - Tests get the path only through one helper in `tests/common/mod.rs`, written by the test author and frozen with the suite:
 
   ```rust

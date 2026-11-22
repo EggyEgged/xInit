@@ -20,6 +20,7 @@
 - 2026-11-22: The workspace root is also the package `xinit-tests`, which owns tests/. It has one entry file per milestone (tests/m<n>.rs), inherits workspace lints but not the no-panic forbid, and depends only on xinit-api. verify-milestone lists the milestone's suite and checks for orphan files. See specs/ARCHITECTURE.md, Test suite layout.
 - 2026-11-22: The blind test workspace is built by scripts/make-blind-workspace.sh rather than ad hoc sed commands, and fails if the Cargo.toml shape changes.
 - 2026-11-22: Tests find the binary only through XRGINIT_BIN (absolute path), read by the helper `xrginit_bin()` in tests/common/mod.rs, which panics loudly if it is unusable. There is no fallback path. See specs/ARCHITECTURE.md.
+- 2026-11-22: verify-milestone always builds xrginit (--locked, dev profile) and overwrites XRGINIT_BIN with its absolute path. It prints the path and sha256. A failed build stops the gate before any test runs. The holdout suite gets the same XRGINIT_BIN.
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
 - 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 
@@ -47,3 +48,7 @@
   - An unreached tests/m0/forgotten.rs failed the gate as an orphan.
   - Removing tests/m0.rs while a crate unit test still passed failed the gate at `suite tests/m0.rs`.
   - Real repository, verify-milestone M0: exit 1, RESULT: FAILED (4): features/M0.json, frozen M0, suite tests/m0.rs, zero tests ran.
+- 2026-11-22 XRGINIT_BIN in the gate: tested on a scratch copy with a test that runs xrginit_bin() and checks the stub's exact stderr.
+  - Clean run: RESULT: PASSED, XRGINIT_BIN=<copy>/target/debug/xrginit.
+  - With a stale XRGINIT_BIN exported (a script printing "STALE BINARY"), the gate tested the fresh build: PASSED, same path. Control: the same test run directly against the stale binary FAILED (left "STALE BINARY").
+  - Broken build (unclosed delimiter in main.rs, stale export still set): exit 1. The log shows "tests: NOT RUN" and "binary: none (build failed)", with the compiler error. No tests ran.
