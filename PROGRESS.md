@@ -24,6 +24,17 @@
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
 - 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 
+## Autopilot
+Driver: docs/build-prompts.md section 4. Roles launch only through `scripts/run-role.sh <dir> <prompt-file> <output-file> <allowed-tools> [holdout-dir]`.
+
+Flag spellings checked with `claude --help` (Claude Code 2.1.330), 2026-11-22: `-p` (`--print`), `--model`, `--permission-mode`, `--allowedTools` (alias `--allowed-tools`), `--disallowedTools` (alias `--disallowed-tools`), `--add-dir`, `--output-format`. run-role.sh uses `-p`, `--model claude-opus-5-5`, `--permission-mode acceptEdits`, `--allowedTools`, `--disallowedTools`, `--add-dir`, `--output-format json`.
+
+Setup checks, 2026-11-22: main clean and equal to origin/main (77b8833); gh auth OK; cargo 1.96.0 from ~/.cargo/bin matches rust-toolchain.toml.
+
+### Session log
+| Date | Milestone | Role | Exit | Outcome |
+|---|---|---|---|---|
+
 ## Spec disputes
 (none)
 
