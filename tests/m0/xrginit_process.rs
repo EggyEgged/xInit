@@ -2,7 +2,9 @@
 //! format). Every run in this suite also parses each stderr line strictly against
 //! B-M0-028 (tests/common/mod.rs, parse_log_line).
 
-use super::common::{EXIT_DEADLINE, Run, SIGTERM, TempDir, child_lock_shared, status_mask, unit_toml};
+use super::common::{
+    EXIT_DEADLINE, Run, SIGTERM, TempDir, child_lock_shared, status_mask, unit_toml,
+};
 use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
@@ -19,16 +21,34 @@ const PIPE: u64 = 0x1000;
 fn b_m0_027_xrginit_signal_dispositions() {
     let _g = child_lock_shared();
     let t = TempDir::new();
-    let p = t.write("s.toml", &unit_toml("sigown", &["/usr/bin/sleep", "60"], ""));
+    let p = t.write(
+        "s.toml",
+        &unit_toml("sigown", &["/usr/bin/sleep", "60"], ""),
+    );
     let mut r = Run::unit(&p);
     r.wait_running();
     let x = r.pid;
-    let (cgt, blk, ign) = (status_mask(x, "SigCgt"), status_mask(x, "SigBlk"), status_mask(x, "SigIgn"));
+    let (cgt, blk, ign) = (
+        status_mask(x, "SigCgt"),
+        status_mask(x, "SigBlk"),
+        status_mask(x, "SigIgn"),
+    );
     r.signal_xrginit(SIGTERM);
     let d = r.finish(EXIT_DEADLINE);
-    assert_eq!(cgt & !INT_TERM_CHLD, 0, "B-M0-027: SigCgt {cgt:016x} has bits outside INT, TERM, CHLD");
-    assert_eq!(blk & !INT_TERM_CHLD, 0, "B-M0-027: SigBlk {blk:016x} has bits outside INT, TERM, CHLD");
-    assert!(ign == 0 || ign == PIPE, "B-M0-027: SigIgn {ign:016x} must be empty or exactly SIGPIPE");
+    assert_eq!(
+        cgt & !INT_TERM_CHLD,
+        0,
+        "B-M0-027: SigCgt {cgt:016x} has bits outside INT, TERM, CHLD"
+    );
+    assert_eq!(
+        blk & !INT_TERM_CHLD,
+        0,
+        "B-M0-027: SigBlk {blk:016x} has bits outside INT, TERM, CHLD"
+    );
+    assert!(
+        ign == 0 || ign == PIPE,
+        "B-M0-027: SigIgn {ign:016x} must be empty or exactly SIGPIPE"
+    );
     assert_eq!(d.code, Some(0), "{}", d.text);
     d.check_run_invariants("sigown");
 }
@@ -48,12 +68,30 @@ fn b_m0_028_quoted_path_escapes() {
     let l = d.events("unit-invalid");
     assert_eq!(l.len(), 1, "{}", d.text);
     let l = l[0];
-    assert_eq!(l.get_bytes("path"), Some(p.as_os_str().as_bytes()), "B-M0-028: decoded path value\n{}", l.raw);
+    assert_eq!(
+        l.get_bytes("path"),
+        Some(p.as_os_str().as_bytes()),
+        "B-M0-028: decoded path value\n{}",
+        l.raw
+    );
     // U+00E9 is UTF-8 0xC3 0xA9, so it must appear as \xC3\xA9 (hex case unspecified).
     let lower = l.raw.to_ascii_lowercase();
-    assert!(lower.contains("\\xc3\\xa9"), "B-M0-028: non-ASCII bytes as \\xHH: {}", l.raw);
-    assert!(l.raw.contains("q \\\"x\\\"\\tz "), "B-M0-028: '\"' as \\\" and tab as \\t: {}", l.raw);
-    assert_eq!(l.get("key").as_deref(), Some("execution.xinit_m0_bogus"), "{}", l.raw);
+    assert!(
+        lower.contains("\\xc3\\xa9"),
+        "B-M0-028: non-ASCII bytes as \\xHH: {}",
+        l.raw
+    );
+    assert!(
+        l.raw.contains("q \\\"x\\\"\\tz "),
+        "B-M0-028: '\"' as \\\" and tab as \\t: {}",
+        l.raw
+    );
+    assert_eq!(
+        l.get("key").as_deref(),
+        Some("execution.xinit_m0_bogus"),
+        "{}",
+        l.raw
+    );
 }
 
 // spec: B-M0-028 (invalid UTF-8 in a value is written as \xHH inside quotes)
@@ -68,6 +106,15 @@ fn b_m0_028_invalid_utf8_path() {
     assert_eq!(l.len(), 1, "{}", d.text);
     let l = l[0];
     assert_eq!(l.get("errno").as_deref(), Some("ENOENT"), "{}", l.raw);
-    assert_eq!(l.get_bytes("path"), Some(p.as_os_str().as_bytes()), "B-M0-028: decoded path value\n{}", l.raw);
-    assert!(l.raw.to_ascii_lowercase().contains("-\\xff-"), "B-M0-028: byte 0xFF as \\xFF: {}", l.raw);
+    assert_eq!(
+        l.get_bytes("path"),
+        Some(p.as_os_str().as_bytes()),
+        "B-M0-028: decoded path value\n{}",
+        l.raw
+    );
+    assert!(
+        l.raw.to_ascii_lowercase().contains("-\\xff-"),
+        "B-M0-028: byte 0xFF as \\xFF: {}",
+        l.raw
+    );
 }

@@ -48,7 +48,12 @@ pub fn xrginit_bin() -> PathBuf {
 
 /// Test prerequisites from specs/M0.md. A missing one fails the test, naming it.
 pub fn require_prereqs() {
-    for p in ["/bin/sh", "/usr/bin/sleep", "/usr/bin/false", "/proc/self/stat"] {
+    for p in [
+        "/bin/sh",
+        "/usr/bin/sleep",
+        "/usr/bin/false",
+        "/proc/self/stat",
+    ] {
         assert!(
             Path::new(p).exists(),
             "test prerequisite {p} is missing (specs/M0.md, Test harness facts); this test cannot run"
@@ -64,13 +69,17 @@ static CHILD_LOCK: RwLock<()> = RwLock::new(());
 
 /// Held by every test that creates child processes.
 pub fn child_lock_shared() -> RwLockReadGuard<'static, ()> {
-    CHILD_LOCK.read().unwrap_or_else(std::sync::PoisonError::into_inner)
+    CHILD_LOCK
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Held by tests that assert the test process has no children, so no concurrent
 /// test creates one meanwhile.
 pub fn child_lock_exclusive() -> RwLockWriteGuard<'static, ()> {
-    CHILD_LOCK.write().unwrap_or_else(std::sync::PoisonError::into_inner)
+    CHILD_LOCK
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Pids whose ppid (field 4 of /proc/<pid>/stat) is this test process, running or zombie.
@@ -102,7 +111,10 @@ pub fn field(pid: u32, n: usize) -> Option<String> {
     if n == 2 {
         return Some(s[..=close].split_once(' ')?.1.to_string());
     }
-    s[close + 1..].split_whitespace().nth(n - 3).map(String::from)
+    s[close + 1..]
+        .split_whitespace()
+        .nth(n - 3)
+        .map(String::from)
 }
 
 /// Start time (field 22) of a pid, if it exists.
@@ -141,7 +153,12 @@ pub fn self_euid_egid() -> (u32, u32) {
     let me = std::process::id();
     let uid = status_value(me, "Uid");
     let gid = status_value(me, "Gid");
-    let second = |v: &str| v.split(' ').nth(1).and_then(|x| x.parse().ok()).expect("Uid/Gid line");
+    let second = |v: &str| {
+        v.split(' ')
+            .nth(1)
+            .and_then(|x| x.parse().ok())
+            .expect("Uid/Gid line")
+    };
     (second(&uid), second(&gid))
 }
 
@@ -161,7 +178,11 @@ pub fn passwd_entries() -> Vec<PasswdEntry> {
         .filter_map(|l| {
             let f: Vec<&str> = l.split(':').collect();
             (f.len() >= 4).then_some(())?;
-            Some(PasswdEntry { name: f[0].to_string(), uid: f[2].parse().ok()?, gid: f[3].parse().ok()? })
+            Some(PasswdEntry {
+                name: f[0].to_string(),
+                uid: f[2].parse().ok()?,
+                gid: f[3].parse().ok()?,
+            })
         })
         .collect()
 }
@@ -244,7 +265,10 @@ impl TempDir {
 
     /// The joined path as a UTF-8 string, for use inside unit files.
     pub fn s(&self, rel: &str) -> String {
-        self.join(rel).to_str().expect("UTF-8 temp path").to_string()
+        self.join(rel)
+            .to_str()
+            .expect("UTF-8 temp path")
+            .to_string()
     }
 
     pub fn write(&self, rel: &str, contents: &str) -> PathBuf {
@@ -311,17 +335,27 @@ pub struct LogLine {
 
 impl LogLine {
     pub fn get(&self, key: &str) -> Option<String> {
-        self.kv.iter().find(|(k, _)| k == key).map(|(_, v)| String::from_utf8_lossy(v).into_owned())
+        self.kv
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
     }
     pub fn get_bytes(&self, key: &str) -> Option<&[u8]> {
-        self.kv.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_slice())
+        self.kv
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_slice())
     }
     pub fn keys(&self) -> Vec<&str> {
         self.kv.iter().map(|(k, _)| k.as_str()).collect()
     }
     /// The `state=` value of an `event=state` line.
     pub fn state(&self) -> Option<String> {
-        if self.event == "state" { self.get("state") } else { None }
+        if self.event == "state" {
+            self.get("state")
+        } else {
+            None
+        }
     }
 }
 
@@ -335,7 +369,8 @@ fn is_unit_value(u: &str) -> bool {
         || (!b.is_empty()
             && b.len() <= 64
             && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
-            && b.iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"._-".contains(&c)))
+            && b.iter()
+                .all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"._-".contains(&c)))
 }
 
 /// Strict check of the B-M0-028 format:
@@ -372,24 +407,34 @@ pub fn parse_log_line(line: &str) -> Result<LogLine, String> {
     if !matches!(level.as_str(), "INFO" | "WARN" | "ERROR") {
         return Err(format!("level {level:?}"));
     }
-    let unit = parts.next().and_then(|u| u.strip_prefix("unit=")).ok_or("no unit= field")?.to_string();
+    let unit = parts
+        .next()
+        .and_then(|u| u.strip_prefix("unit="))
+        .ok_or("no unit= field")?
+        .to_string();
     if !is_unit_value(&unit) {
         return Err(format!("unit value {unit:?}"));
     }
-    let rest = parts.next().and_then(|r| r.strip_prefix("event=")).ok_or("no event= field")?;
+    let rest = parts
+        .next()
+        .and_then(|r| r.strip_prefix("event="))
+        .ok_or("no event= field")?;
     let end = rest.find(' ').unwrap_or(rest.len());
     let event = rest[..end].to_string();
     if event.is_empty() || !event.bytes().all(|c| c.is_ascii_lowercase() || c == b'-') {
         return Err(format!("event value {event:?}"));
     }
-    let mut r = rest[end..].as_bytes();
+    let mut r = &rest.as_bytes()[end..];
     let mut kv = Vec::new();
     while !r.is_empty() {
         if r[0] != b' ' {
             return Err("fields must be separated by one space".into());
         }
         r = &r[1..];
-        let eq = r.iter().position(|&c| c == b'=').ok_or("field without '='")?;
+        let eq = r
+            .iter()
+            .position(|&c| c == b'=')
+            .ok_or("field without '='")?;
         let key = String::from_utf8_lossy(&r[..eq]).into_owned();
         if key.is_empty() || !key.bytes().all(|c| c.is_ascii_lowercase() || c == b'_') {
             return Err(format!("key {key:?}"));
@@ -416,7 +461,9 @@ pub fn parse_log_line(line: &str) -> Result<LogLine, String> {
                                 let x = u8::from_str_radix(h, 16).map_err(|_| "bad \\x escape")?;
                                 let allowed = (x < 0x20 && x != b'\n' && x != b'\t') || x >= 0x7f;
                                 if !allowed {
-                                    return Err(format!("\\x{h} used for a byte that has another spelling"));
+                                    return Err(format!(
+                                        "\\x{h} used for a byte that has another spelling"
+                                    ));
                                 }
                                 v.push(x);
                                 i += 2;
@@ -445,7 +492,13 @@ pub fn parse_log_line(line: &str) -> Result<LogLine, String> {
         }
         kv.push((key, v));
     }
-    Ok(LogLine { raw: line.to_string(), level, unit, event, kv })
+    Ok(LogLine {
+        raw: line.to_string(),
+        level,
+        unit,
+        event,
+        kv,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -533,8 +586,11 @@ impl Run {
         .into_bytes();
         let (err_r, err_w) = std::io::pipe().expect("pipe");
         let (out_r, out_w) = std::io::pipe().expect("pipe");
-        cmd.stderr(err_w.try_clone().expect("dup")).stdout(out_w.try_clone().expect("dup"));
-        let mut child = cmd.spawn().unwrap_or_else(|e| panic!("cannot spawn {:?}: {e}", cmd.get_program()));
+        cmd.stderr(err_w.try_clone().expect("dup"))
+            .stdout(out_w.try_clone().expect("dup"));
+        let mut child = cmd
+            .spawn()
+            .unwrap_or_else(|e| panic!("cannot spawn {:?}: {e}", cmd.get_program()));
         drop(cmd);
         let pid = child.id();
         let (tx, rx) = mpsc::channel();
@@ -585,8 +641,16 @@ impl Run {
     }
 
     fn describe(&self) -> String {
-        let lines: Vec<String> = self.raw.iter().map(|l| String::from_utf8_lossy(l).into_owned()).collect();
-        format!("exit: {:?}\nstderr:\n{}", self.exit.map(|e| e.0), lines.join("\n"))
+        let lines: Vec<String> = self
+            .raw
+            .iter()
+            .map(|l| String::from_utf8_lossy(l).into_owned())
+            .collect();
+        format!(
+            "exit: {:?}\nstderr:\n{}",
+            self.exit.map(|e| e.0),
+            lines.join("\n")
+        )
     }
 
     /// Sends a signal to xrginit and returns the instant just before sending it.
@@ -594,9 +658,17 @@ impl Run {
         while let Ok(m) = self.rx.try_recv() {
             self.handle(m);
         }
-        assert!(self.exit.is_none(), "xrginit exited before the test could signal it\n{}", self.describe());
+        assert!(
+            self.exit.is_none(),
+            "xrginit exited before the test could signal it\n{}",
+            self.describe()
+        );
         let t = Instant::now();
-        assert!(send_signal(self.pid as i32, sig), "kill({}, {sig}) failed", self.pid);
+        assert!(
+            send_signal(self.pid as i32, sig),
+            "kill({}, {sig}) failed",
+            self.pid
+        );
         t
     }
 
@@ -608,12 +680,17 @@ impl Run {
             while self.cursor < self.raw.len() {
                 let text = String::from_utf8_lossy(&self.raw[self.cursor]).into_owned();
                 self.cursor += 1;
-                let line = parse_log_line(&text)
-                    .unwrap_or_else(|e| panic!("B-M0-028: bad log line ({e}): {text:?}\n{}", self.describe()));
-                if line.state().as_deref() == Some("running") && self.service.is_none() {
-                    if let Some(pid) = line.get("pid").and_then(|p| p.parse::<u32>().ok()) {
-                        self.service = start_time(pid).map(|s| (pid, s));
-                    }
+                let line = parse_log_line(&text).unwrap_or_else(|e| {
+                    panic!(
+                        "B-M0-028: bad log line ({e}): {text:?}\n{}",
+                        self.describe()
+                    )
+                });
+                if line.state().as_deref() == Some("running")
+                    && self.service.is_none()
+                    && let Some(pid) = line.get("pid").and_then(|p| p.parse::<u32>().ok())
+                {
+                    self.service = start_time(pid).map(|s| (pid, s));
                 }
                 if pred(&line) {
                     return line;
@@ -621,17 +698,26 @@ impl Run {
             }
             if self.exit.is_some() {
                 if self.drained() {
-                    panic!("xrginit exited without writing a {what} line\n{}", self.describe());
+                    panic!(
+                        "xrginit exited without writing a {what} line\n{}",
+                        self.describe()
+                    );
                 }
                 self.write_sentinels();
-                let m = self.rx.recv().expect("reader threads end only after the sentinel");
+                let m = self
+                    .rx
+                    .recv()
+                    .expect("reader threads end only after the sentinel");
                 self.handle(m);
                 continue;
             }
             let left = deadline.saturating_duration_since(Instant::now());
             match self.rx.recv_timeout(left) {
                 Ok(m) => self.handle(m),
-                Err(_) => panic!("no {what} line within {LINE_DEADLINE:?}\n{}", self.describe()),
+                Err(_) => panic!(
+                    "no {what} line within {LINE_DEADLINE:?}\n{}",
+                    self.describe()
+                ),
             }
         }
     }
@@ -657,7 +743,10 @@ impl Run {
         }
         self.write_sentinels();
         while !self.drained() {
-            let m = self.rx.recv().expect("reader threads end only after the sentinel");
+            let m = self
+                .rx
+                .recv()
+                .expect("reader threads end only after the sentinel");
             self.handle(m);
         }
         let text = self.describe();
@@ -666,11 +755,20 @@ impl Run {
             .iter()
             .map(|l| {
                 let s = String::from_utf8_lossy(l).into_owned();
-                parse_log_line(&s).unwrap_or_else(|e| panic!("B-M0-028: bad log line ({e}): {s:?}\n{text}"))
+                parse_log_line(&s)
+                    .unwrap_or_else(|e| panic!("B-M0-028: bad log line ({e}): {s:?}\n{text}"))
             })
             .collect();
         let (status, at) = self.exit.expect("exit recorded");
-        Finished { status, code: status.code(), at, lines, stdout: std::mem::take(&mut self.stdout), text, service: self.service }
+        Finished {
+            status,
+            code: status.code(),
+            at,
+            lines,
+            stdout: std::mem::take(&mut self.stdout),
+            text,
+            service: self.service,
+        }
     }
 }
 
@@ -682,11 +780,11 @@ impl Drop for Run {
         if self.exit.is_none() {
             send_signal(self.pid as i32, SIGKILL);
         }
-        if let Some((p, st)) = self.service {
-            if is_live(p, st) {
-                send_signal(-(p as i32), SIGKILL);
-                send_signal(p as i32, SIGKILL);
-            }
+        if let Some((p, st)) = self.service
+            && is_live(p, st)
+        {
+            send_signal(-(p as i32), SIGKILL);
+            send_signal(p as i32, SIGKILL);
         }
         self.write_sentinels();
     }
@@ -711,7 +809,10 @@ impl Finished {
         self.states().iter().filter_map(|l| l.state()).collect()
     }
     pub fn final_state(&self) -> &LogLine {
-        self.states().last().copied().unwrap_or_else(|| panic!("no state line\n{}", self.text))
+        self.states()
+            .last()
+            .copied()
+            .unwrap_or_else(|| panic!("no state line\n{}", self.text))
     }
     pub fn events(&self, event: &str) -> Vec<&LogLine> {
         self.lines.iter().filter(|l| l.event == event).collect()
@@ -724,27 +825,68 @@ impl Finished {
     /// I-2, I-3, I-4, I-5 for a run that loaded the unit `unit`.
     pub fn check_run_invariants(&self, unit: &str) {
         let t = &self.text;
-        assert!(self.stdout.is_empty(), "I-5: xrginit wrote to stdout: {:?}\n{t}", String::from_utf8_lossy(&self.stdout));
+        assert!(
+            self.stdout.is_empty(),
+            "I-5: xrginit wrote to stdout: {:?}\n{t}",
+            String::from_utf8_lossy(&self.stdout)
+        );
         let s = self.state_names();
-        assert_eq!(s.first().map(String::as_str), Some("starting"), "I-2: first state must be starting\n{t}");
-        assert_eq!(s.iter().filter(|x| *x == "starting").count(), 1, "I-2: exactly one starting\n{t}");
-        assert!(s.iter().filter(|x| *x == "running").count() <= 1, "I-2: at most one running\n{t}");
-        let finals = s.iter().filter(|x| *x == "exited" || *x == "failed").count();
+        assert_eq!(
+            s.first().map(String::as_str),
+            Some("starting"),
+            "I-2: first state must be starting\n{t}"
+        );
+        assert_eq!(
+            s.iter().filter(|x| *x == "starting").count(),
+            1,
+            "I-2: exactly one starting\n{t}"
+        );
+        assert!(
+            s.iter().filter(|x| *x == "running").count() <= 1,
+            "I-2: at most one running\n{t}"
+        );
+        let finals = s
+            .iter()
+            .filter(|x| *x == "exited" || *x == "failed")
+            .count();
         assert_eq!(finals, 1, "I-2: exactly one final state line\n{t}");
-        assert!(matches!(s.last().map(String::as_str), Some("exited" | "failed")), "I-2: final state last\n{t}");
+        assert!(
+            matches!(s.last().map(String::as_str), Some("exited" | "failed")),
+            "I-2: final state last\n{t}"
+        );
         if let Some(i) = s.iter().position(|x| x == "running") {
             assert_eq!(i, 1, "I-2: running must directly follow starting\n{t}");
         }
         for l in self.states() {
             assert_eq!(l.unit, unit, "state lines carry unit={unit}\n{t}");
-            let want = if l.state().as_deref() == Some("failed") { "ERROR" } else { "INFO" };
-            assert_eq!(l.level, want, "B-M0-028: level of state={:?}\n{t}", l.state());
+            let want = if l.state().as_deref() == Some("failed") {
+                "ERROR"
+            } else {
+                "INFO"
+            };
+            assert_eq!(
+                l.level,
+                want,
+                "B-M0-028: level of state={:?}\n{t}",
+                l.state()
+            );
         }
-        if let Some(r) = self.states().into_iter().find(|l| l.state().as_deref() == Some("running")) {
-            assert_eq!(self.final_state().get("pid"), r.get("pid"), "I-3: final pid equals running pid\n{t}");
+        if let Some(r) = self
+            .states()
+            .into_iter()
+            .find(|l| l.state().as_deref() == Some("running"))
+        {
+            assert_eq!(
+                self.final_state().get("pid"),
+                r.get("pid"),
+                "I-3: final pid equals running pid\n{t}"
+            );
         }
         if let Some((p, st)) = self.service {
-            assert!(!same_process_exists(p, st), "I-4: service {p} still exists after xrginit exited\n{t}");
+            assert!(
+                !same_process_exists(p, st),
+                "I-4: service {p} still exists after xrginit exited\n{t}"
+            );
         }
     }
 }
