@@ -5,6 +5,7 @@
 //!
 //! M0 items follow specs/M0.md, section "Public surface".
 
+use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
@@ -55,7 +56,7 @@ pub struct ServiceSection {
 }
 
 /// Service type. M0 supports only `simple`. Spec: B-M0-007.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceType {
     /// `type = "simple"`.
     Simple,
@@ -161,7 +162,7 @@ impl Service {
 }
 
 /// A signal the API can send. Spec: B-M0-030.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
     /// SIGTERM.
     Term,
@@ -172,7 +173,7 @@ pub enum Signal {
 }
 
 /// How a reaped process ended. Spec: B-M0-029 to B-M0-031.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Termination {
     /// Exited with this exit code.
     Exited(i32),
@@ -236,3 +237,47 @@ pub enum WaitError {
         errno: i32,
     },
 }
+
+/// Human-readable message. Tests must not assert this text. Spec: B-M0-003 to B-M0-009, B-M0-012.
+impl fmt::Display for UnitError {
+    #[expect(unused_variables, reason = "stub body; remove when implemented")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
+    }
+}
+
+/// Spec: B-M0-003 to B-M0-009, B-M0-012.
+impl std::error::Error for UnitError {}
+
+/// Human-readable message. Tests must not assert this text. Spec: B-M0-016, B-M0-025, B-M0-026.
+impl fmt::Display for StartError {
+    #[expect(unused_variables, reason = "stub body; remove when implemented")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
+    }
+}
+
+/// Spec: B-M0-016, B-M0-025, B-M0-026.
+impl std::error::Error for StartError {}
+
+/// Human-readable message. Tests must not assert this text. Spec: B-M0-030.
+impl fmt::Display for SignalError {
+    #[expect(unused_variables, reason = "stub body; remove when implemented")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
+    }
+}
+
+/// Spec: B-M0-030.
+impl std::error::Error for SignalError {}
+
+/// Human-readable message. Tests must not assert this text. Spec: B-M0-029, B-M0-031.
+impl fmt::Display for WaitError {
+    #[expect(unused_variables, reason = "stub body; remove when implemented")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
+    }
+}
+
+/// Spec: B-M0-029, B-M0-031.
+impl std::error::Error for WaitError {}
