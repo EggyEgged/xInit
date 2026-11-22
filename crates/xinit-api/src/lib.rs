@@ -15,10 +15,10 @@ pub const SCHEMA_VERSION: i64 = 1;
 /// Fixed stop timeout of the CLI, 5000 ms. Spec: B-M0-017, B-M0-018, I-6.
 pub const DEFAULT_STOP_TIMEOUT: Duration = Duration::from_millis(5000);
 
-/// Parses unit file text (schema version 1). Spec: B-M0-001 to B-M0-009.
+/// Parses unit file text (schema version 1). Spec: B-M0-001 to B-M0-010.
 ///
 /// # Errors
-/// Returns the [`UnitError`] for the unit's defect (B-M0-003 to B-M0-009).
+/// Returns the [`UnitError`] for the unit's defect (B-M0-003 to B-M0-010).
 #[expect(unused_variables, reason = "stub body; remove when implemented")]
 pub fn parse_unit(text: &str) -> Result<Unit, UnitError> {
     unimplemented!()
@@ -33,13 +33,17 @@ pub fn load_unit(path: &Path) -> Result<Unit, UnitError> {
     unimplemented!()
 }
 
-/// A parsed unit file. Spec: B-M0-001, B-M0-002.
+/// A parsed unit file. Spec: B-M0-001, B-M0-002, B-M0-010.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unit {
     /// The `[service]` table.
     pub service: ServiceSection,
     /// The `[execution]` table.
     pub execution: ExecutionSection,
+    /// The `[dependencies]` table; defaults when absent. Spec: B-M0-010.
+    pub dependencies: DependenciesSection,
+    /// The `[restart]` table; defaults when absent. Spec: B-M0-010.
+    pub restart: RestartSection,
 }
 
 /// The `[service]` table. Spec: B-M0-001, B-M0-002, B-M0-005 to B-M0-008.
@@ -71,9 +75,38 @@ pub struct ExecutionSection {
     pub user: Option<String>,
 }
 
+/// The `[dependencies]` table. Parsed and validated, no effect in M0. Spec: B-M0-010, Q1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependenciesSection {
+    /// `dependencies.requires`: unit names, default empty.
+    pub requires: Vec<String>,
+    /// `dependencies.after`: unit names, default empty.
+    pub after: Vec<String>,
+}
+
+/// The `[restart]` table. Parsed and validated, no effect in M0. Spec: B-M0-010, Q1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestartSection {
+    /// `restart.policy`, default `"no"`.
+    pub policy: RestartPolicy,
+    /// `restart.maximum_restarts`, non-negative, default 0.
+    pub maximum_restarts: u64,
+}
+
+/// `restart.policy`. Spec: B-M0-010, Q1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestartPolicy {
+    /// `"no"`.
+    No,
+    /// `"on-failure"`.
+    OnFailure,
+    /// `"always"`.
+    Always,
+}
+
 /// Unit loading error. Log `error=` kinds in variant order: `io`, `syntax`,
 /// `schema-version`, `unknown-key`, `missing-key`, `invalid-type`, `invalid-value`,
-/// `unsupported-service-type`. Spec: B-M0-003 to B-M0-009, B-M0-012.
+/// `unsupported-service-type`. Spec: B-M0-003 to B-M0-010, B-M0-012.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnitError {
     /// The file could not be read. Spec: B-M0-009.
@@ -88,7 +121,7 @@ pub enum UnitError {
         /// The version found.
         found: i64,
     },
-    /// A key or table not in the schema. Spec: B-M0-004.
+    /// A key or table not in the schema. Spec: B-M0-004, B-M0-010.
     UnknownKey {
         /// Key path.
         key: String,
@@ -98,12 +131,12 @@ pub enum UnitError {
         /// Key path.
         key: String,
     },
-    /// A key has the wrong TOML type. Spec: B-M0-003, B-M0-006.
+    /// A key has the wrong TOML type. Spec: B-M0-003, B-M0-006, B-M0-010.
     InvalidType {
         /// Key path.
         key: String,
     },
-    /// A key has a value its rule rejects. Spec: B-M0-008.
+    /// A key has a value its rule rejects. Spec: B-M0-008, B-M0-010.
     InvalidValue {
         /// Key path.
         key: String,
@@ -115,9 +148,12 @@ pub enum UnitError {
     },
 }
 
-/// One started process, tracked by pidfd. Spec: B-M0-016, B-M0-029 to B-M0-032, I-1.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Service;
+/// One started process, tracked by pidfd. Fields are private; obtain one only
+/// from [`Service::start`]. Spec: B-M0-016, B-M0-029 to B-M0-032, I-1.
+#[derive(Debug)]
+pub struct Service {
+    _private: (),
+}
 
 impl Service {
     /// Starts the command in `exec`. Spec: B-M0-016, B-M0-020 to B-M0-026, B-M0-029, B-M0-032.
@@ -238,7 +274,7 @@ pub enum WaitError {
     },
 }
 
-/// Human-readable message. Tests must not assert this text. Spec: B-M0-003 to B-M0-009, B-M0-012.
+/// Human-readable message. Tests must not assert this text. Spec: B-M0-003 to B-M0-010, B-M0-012.
 impl fmt::Display for UnitError {
     #[expect(unused_variables, reason = "stub body; remove when implemented")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -246,7 +282,7 @@ impl fmt::Display for UnitError {
     }
 }
 
-/// Spec: B-M0-003 to B-M0-009, B-M0-012.
+/// Spec: B-M0-003 to B-M0-010, B-M0-012.
 impl std::error::Error for UnitError {}
 
 /// Human-readable message. Tests must not assert this text. Spec: B-M0-016, B-M0-025, B-M0-026.
