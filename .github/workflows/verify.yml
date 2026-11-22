@@ -1,0 +1,47 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain pinned in rust-toolchain.toml
+        # rustup reads channel, components (rustfmt, clippy) and targets from the file.
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+          cargo --version
+          cargo fmt --version
+          cargo clippy --version
+
+      - name: Frozen-test check
+        run: scripts/check-frozen.sh
+
+      - name: Gate every frozen milestone
+        # The holdout suite is never run in CI.
+        run: |
+          set -euo pipefail
+          milestones=""
+          if [[ -f FROZEN ]]; then
+            milestones="$(grep -v '^[[:space:]]*$' FROZEN || true)"
+          fi
+          if [[ -n "$milestones" ]]; then
+            for m in $milestones; do
+              echo "::group::verify-milestone $m"
+              scripts/verify-milestone.sh "$m"
+              echo "::endgroup::"
+            done
+          else
+            echo "FROZEN lists no milestones; running build, clippy and hygiene only"
+            cargo build --locked
+            cargo clippy --locked -- -D warnings
+            scripts/check-hygiene.sh
+          fi
