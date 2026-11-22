@@ -1,0 +1,167 @@
+M0 red check and self-check (blind test author, 2026-11-22)
+=============================================================
+
+1. Red check: main suite against the xinit-api stub
+---------------------------------------------------
+Command:  cargo test --offline --test m0        (XRGINIT_BIN unset, no binary in the blind workspace)
+Compile:  clean, no errors or warnings ("Finished `test` profile ... Executable tests/m0.rs")
+Result:   running 111 tests ... 0 passed; 111 failed  (exit 101)
+
+Failure causes (runtime panics, no compile errors):
+- 61 unit_loading tests + all API tests (pidfd_api, api_model, service_env *_api_*):
+    panicked at crates/xinit-api/src/lib.rs:24:5 / 33:5 / 165:9: not implemented
+- every test that runs the binary (cli_lifecycle, service_env CLI tests, xrginit_process):
+    panicked at tests/m0/../common/mod.rs:32:9:
+    XRGINIT_BIN is not set: it must hold the absolute path of the xrginit binary under test (there is no fallback path)
+
+Per-test results (libtest --logfile):
+failed m0::cli_lifecycle::b_m0_011_usage_no_arguments
+failed m0::api_model::b_m0_029_030_031_service_state_machine_model
+failed m0::cli_lifecycle::b_m0_011_usage_run_without_unit
+failed m0::cli_lifecycle::b_m0_011_usage_unknown_subcommand_frobnicate
+failed m0::cli_lifecycle::b_m0_011_usage_run_with_two_paths
+failed m0::cli_lifecycle::b_m0_010_cli_restart_always_runs_once
+failed m0::cli_lifecycle::b_m0_012_cli_missing_file
+failed m0::cli_lifecycle::b_m0_012_cli_invalid_type
+failed m0::cli_lifecycle::b_m0_012_cli_invalid_value
+failed m0::cli_lifecycle::b_m0_012_cli_missing_key
+failed m0::cli_lifecycle::b_m0_012_cli_unknown_key
+failed m0::cli_lifecycle::b_m0_012_cli_unsupported_service_type
+failed m0::cli_lifecycle::b_m0_012_cli_syntax_error
+failed m0::cli_lifecycle::b_m0_013_relative_unit_path
+failed m0::cli_lifecycle::b_m0_013_successful_run
+failed m0::cli_lifecycle::b_m0_017_sigint_requested_stop
+failed m0::cli_lifecycle::b_m0_017_sigterm_requested_stop
+failed m0::cli_lifecycle::b_m0_012_cli_schema_version
+failed m0::cli_lifecycle::b_m0_015_killed_by_foreign_sigkill
+failed m0::cli_lifecycle::b_m0_016_cli_not_executable_eacces
+failed m0::pidfd_api::b_m0_029_pid_names_the_started_process
+failed m0::cli_lifecycle::b_m0_016_cli_command_not_found
+failed m0::cli_lifecycle::b_m0_017_further_signals_during_stop_change_nothing
+failed m0::cli_lifecycle::b_m0_014_nonzero_exit_is_failed
+failed m0::cli_lifecycle::b_m0_018_service_ignores_sigterm_escalates
+failed m0::pidfd_api::b_m0_030_signal_after_reap_fails_and_reaches_nobody
+failed m0::pidfd_api::b_m0_030_signal_numbers_term_and_int
+failed m0::pidfd_api::b_m0_031_default_stop_timeout_is_5000_ms_and_used_by_stop
+failed m0::cli_lifecycle::b_m0_019_double_fork_grandchild_untracked
+failed m0::service_env::b_m0_021_signal_state_reset_plain_start
+failed m0::service_env::b_m0_021_signal_state_reset_with_inherited_ignores
+failed m0::cli_lifecycle::b_m0_017_stop_records_exit_code
+failed m0::pidfd_api::b_m0_016_b_m0_032_api_exec_eacces_no_child
+failed m0::pidfd_api::b_m0_016_b_m0_032_api_exec_enoent_no_child
+failed m0::service_env::b_m0_025_api_unknown_user_no_child
+failed m0::service_env::b_m0_026_api_same_user_starts
+failed m0::pidfd_api::b_m0_031_stop_without_escalation
+failed m0::pidfd_api::b_m0_029_start_and_wait_exit_7
+failed m0::service_env::b_m0_026_api_other_user_credentials_no_child
+failed m0::service_env::b_m0_020_argv_passed_verbatim
+failed m0::service_env::b_m0_025_cli_unknown_user
+failed m0::service_env::b_m0_023_only_fds_0_1_2_open
+failed m0::service_env::b_m0_022_new_session_and_process_group
+failed m0::pidfd_api::b_m0_031_stop_escalates_after_timeout
+failed m0::service_env::b_m0_024_identity_cwd_and_env_inherited
+failed m0::service_env::b_m0_026_cli_other_user_credentials_eperm
+failed m0::service_env::b_m0_026_cli_same_user_runs_unchanged
+failed m0::unit_loading::b_m0_001_minimal_unit_spec_example
+failed m0::unit_loading::b_m0_001_tables_in_other_order
+failed m0::unit_loading::b_m0_002_all_optional_fields
+failed m0::unit_loading::b_m0_002_empty_dependencies_and_restart_tables
+failed m0::unit_loading::b_m0_003_schema_version_absent
+failed m0::unit_loading::b_m0_001_minimal_unit_via_load_unit
+failed m0::unit_loading::b_m0_003_schema_version_zero
+failed m0::unit_loading::b_m0_003_schema_version_string
+failed m0::unit_loading::b_m0_003_schema_version_negative
+failed m0::unit_loading::b_m0_003_schema_version_float
+failed m0::unit_loading::b_m0_003_schema_version_two
+failed m0::unit_loading::b_m0_004_unknown_key_execution_comand
+failed m0::unit_loading::b_m0_004_unknown_sub_table_of_service
+failed m0::unit_loading::b_m0_004_unknown_key_in_execution
+failed m0::unit_loading::b_m0_004_unknown_key_in_service
+failed m0::unit_loading::b_m0_005_missing_execution_table
+failed m0::unit_loading::b_m0_005_missing_service_name
+failed m0::unit_loading::b_m0_004_unknown_top_level_key
+failed m0::unit_loading::b_m0_005_missing_execution_command
+failed m0::unit_loading::b_m0_006_command_is_string
+failed m0::unit_loading::b_m0_006_command_element_not_string
+failed m0::unit_loading::b_m0_004_unknown_top_level_table
+failed m0::unit_loading::b_m0_006_name_is_integer
+failed m0::unit_loading::b_m0_005_missing_service_type
+failed m0::unit_loading::b_m0_006_description_is_bool
+failed m0::unit_loading::b_m0_005_missing_service_table
+failed m0::unit_loading::b_m0_006_type_is_integer
+failed m0::unit_loading::b_m0_006_user_is_integer
+failed m0::unit_loading::b_m0_007_capitalised_simple_unsupported
+failed m0::unit_loading::b_m0_008_command_dot_relative
+failed m0::unit_loading::b_m0_007_bogus_type_unsupported
+failed m0::unit_loading::b_m0_008_command_empty
+failed m0::unit_loading::b_m0_006_provides_is_string
+failed m0::unit_loading::b_m0_008_command_relative
+failed m0::unit_loading::b_m0_008_command_single_absolute_element_ok
+failed m0::unit_loading::b_m0_008_name_64_chars_ok
+failed m0::unit_loading::b_m0_008_name_65_chars_invalid
+failed m0::unit_loading::b_m0_008_name_leading_dot_invalid
+failed m0::unit_loading::b_m0_008_name_empty
+failed m0::unit_loading::b_m0_008_name_leading_hyphen_invalid
+failed m0::unit_loading::b_m0_008_user_empty
+failed m0::unit_loading::b_m0_008_name_with_all_allowed_classes_ok
+failed m0::unit_loading::b_m0_008_name_with_space_and_capital
+failed m0::unit_loading::b_m0_009_syntax_error
+failed m0::unit_loading::b_m0_009_load_missing_file_enoent
+failed m0::unit_loading::b_m0_009_load_file_with_syntax_error
+failed m0::unit_loading::b_m0_010_after_empty_name
+failed m0::unit_loading::b_m0_010_after_element_integer
+failed m0::unit_loading::b_m0_010_full_dependencies_and_restart
+failed m0::unit_loading::b_m0_010_after_only
+failed m0::unit_loading::b_m0_010_maximum_restarts_string
+failed m0::unit_loading::b_m0_010_maximum_restarts_negative
+failed m0::unit_loading::b_m0_010_policy_always_default_count
+failed m0::unit_loading::b_m0_010_policy_bogus
+failed m0::unit_loading::b_m0_010_policy_capitalised
+failed m0::unit_loading::b_m0_010_policy_integer
+failed m0::unit_loading::b_m0_010_policy_no_explicit
+failed m0::unit_loading::b_m0_010_requires_is_string
+failed m0::unit_loading::b_m0_010_requires_capitalised_name
+failed m0::unit_loading::b_m0_010_unknown_key_in_dependencies
+failed m0::unit_loading::b_m0_010_unknown_key_in_restart
+failed m0::xrginit_process::b_m0_028_invalid_utf8_path
+failed m0::xrginit_process::b_m0_028_quoted_path_escapes
+failed m0::xrginit_process::b_m0_027_xrginit_signal_dispositions
+
+Passing tests against the stub: none. One test was removed before the red run because
+it would have passed against the stub: a self-test of the B-M0-028 format checker
+(it exercised only the test helper, not xrginit). The checker was instead validated
+against real output in the self-check below.
+
+2. Red check: holdout suite ($XINIT_HOLDOUT_DIR = /home/egg/xinit-holdout/m0)
+-----------------------------------------------------------------------------
+Command:  cargo test --offline --locked --manifest-path /home/egg/xinit-holdout/m0/Cargo.toml
+Result:   tests/blackbox.rs: running 19 tests ... 0 passed; 19 failed
+          each: panicked at tests/blackbox.rs:30:9: XRGINIT_BIN is not set: it must name the
+          xrginit binary (absolute path); there is no fallback
+
+3. Self-check (rule 8): three wrong implementations of the most complex clause
+-------------------------------------------------------------------------------
+Clause chosen: the requested-stop / escalation path, B-M0-017 + B-M0-018 (signal handling,
+5000 ms timer, SIGKILL escalation, final state and exit code).
+Scratch: /tmp/xinit-scratch/fake (deleted afterwards), a std-only fake `xrginit run` with a
+correct stop path ("good") and three mutants. Run with
+  cargo --config 'env.XRGINIT_BIN="/tmp/xinit-scratch/fake/target/debug/<bin>"' test --offline --test m0 -- b_m0_017 b_m0_018
+
+good (control): main-suite stop tests 5/5 pass; 23 of the 29 CLI tests the fake can serve
+  pass (the 6 failures are features the fake lacks: fd closing, resetting inherited
+  ignores, users, unit validation, and Rust std's SIGSEGV/SIGBUS handlers, SigCgt 0x440,
+  caught by B-M0-027). Holdout: 13/13 runnable tests pass.
+  The first fake build leaked its blocked mask into the service; b_m0_017_* failed
+  (sleep ignored SIGTERM, "exit took 5.0s (limit 2000 ms)"). Fixed in the fake, not the tests.
+W1 "escalates immediately (timeout 0)":
+  main: 5/5 stop tests FAIL ("B-M0-018: exited after 791µs, before the 5000 ms timeout";
+        B-M0-017 exit code 1 != 0). Holdout: 3/3 stop tests FAIL ("too early (1.17ms)").
+W2 "termination after SIGKILL during a stop is reported as exited, exit 0":
+  main: b_m0_018_service_ignores_sigterm_escalates and
+        b_m0_017_further_signals_during_stop_change_nothing FAIL (exit code 0 != 1);
+        the 3 non-escalating stop tests pass, as they should.
+  Holdout: holdout_b_m0_018_escalation_after_sigint FAILS (exit 0 != 1).
+W3 "a second SIGTERM/SIGINT during the stop forces SIGKILL at once":
+  main: b_m0_017_further_signals_during_stop_change_nothing FAILS
+        ("exited after 824µs, before the 5000 ms timeout"); the other 4 pass, as they should.
+Result: each wrong implementation is caught by at least one test; the control passes.
