@@ -46,6 +46,11 @@ Setup checks, 2026-11-22: main clean and equal to origin/main (77b8833); gh auth
 | 2026-11-22 | M0 | test author (run 1) | 1 | Usage limit hit after 65 turns; 12 Bash calls refused by the tool limits. Workspace discarded; partial holdout kept for run 2 to review. |
 | 2026-11-22 | M0 | test author (run 2) | 0 | 111 tests, 0 passed / 111 failed on stub; holdout 19 tests; 3 wrong stop impls caught. Prompt had an added harness note (one cargo command per call). |
 | 2026-11-22 | M0 | orchestrator Phase 2 | 0 | Only tests/, specs/red, specs/trace changed; 111/111 runtime failures, 0 compile errors; 111 tests cite a clause; hygiene OK; 32/32 clauses traced; frozen (9 files). |
+| 2026-11-22 | M0 | implementer (run 1) | 0 | 825ae0b; 111/111 m0 tests pass; gate failed only on fmt/clippy of frozen tests (D-1, D-2). Holdout 19/19 (run by autopilot). |
+| 2026-11-22 | M0 | test author (fix re-run) | 0 | fmt + 8 clippy fixes, behaviour-preserving (diffed against rustfmt of the original); red still 0/111. Re-frozen ea26a99, merged into m0/impl; gate PASSED 114/0. |
+| 2026-11-22 | M0 | reviewer (round 1) | 0 | No blockers; 1 major: public `impl AsFd for Service` not in the spec (exposes the private pidfd). |
+| 2026-11-22 | M0 | implementer (review round 1) | 0 | 1a1fe49 removes the AsFd impl; CLI opens its own pidfd. Gate PASSED 114/0; holdout 19/19 (autopilot). |
+| 2026-11-22 | M0 | hardening | - | NOT RUN: cargo-mutants is not installed; installing it needs a download and a write to ~/.cargo. Waiting for the user. |
 
 ### Spec notes from the M0 test author (not blocking, not OPEN)
 1. B-M0-026: a root-only success test and the unprivileged EPERM test cannot both pass in one environment. The root test is omitted and listed Untested.
