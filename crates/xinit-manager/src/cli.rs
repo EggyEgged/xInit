@@ -3,7 +3,7 @@
 
 use crate::log::{Level, Value, emit, errno_name, signal_name, v};
 use std::ffi::OsString;
-use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::time::Instant;
@@ -101,6 +101,22 @@ fn stop_signalfd() -> Result<OwnedFd, i32> {
         return Err(errno());
     }
     // SAFETY: signalfd returned a new fd that nothing else owns.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// Opens a pidfd of our own for the service, used only to poll for its exit.
+/// Race-free: the service is our child and is not reaped yet (only `Service::wait`
+/// reaps it, after this call), so its pid cannot have been reused (I-1).
+/// This fd is never signalled through and never passed to waitid.
+fn exit_pollfd(svc: &Service) -> Result<OwnedFd, i32> {
+    let pid = libc::c_long::from(svc.pid());
+    // SAFETY: plain integer arguments; flags 0.
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0 as libc::c_long) };
+    if fd == -1 {
+        return Err(errno());
+    }
+    let fd = libc::c_int::try_from(fd).map_err(|_| libc::EBADF)?;
+    // SAFETY: pidfd_open returned a new fd (O_CLOEXEC by default) that nothing else owns.
     Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
@@ -255,6 +271,10 @@ fn supervise(name: &str, svc: &mut Service, sigfd: &OwnedFd) -> Result<Ended, St
     let pid = svc.pid();
     let mut stop = Stop::None;
     let mut deadline: Option<Instant> = None;
+    let exitfd = match exit_pollfd(svc) {
+        Ok(fd) => fd,
+        Err(e) => return kill_and_reap(svc, format!("pidfd_open: {}", errno_name(e))),
+    };
     loop {
         let timeout_ms = match (stop, deadline) {
             (Stop::Requested { escalated: false }, Some(d)) => {
@@ -267,7 +287,7 @@ fn supervise(name: &str, svc: &mut Service, sigfd: &OwnedFd) -> Result<Ended, St
         };
         let mut fds = [
             libc::pollfd {
-                fd: svc.as_fd().as_raw_fd(),
+                fd: exitfd.as_raw_fd(),
                 events: libc::POLLIN,
                 revents: 0,
             },

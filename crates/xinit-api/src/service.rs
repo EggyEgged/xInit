@@ -28,13 +28,6 @@ pub struct Service {
     reaped: Option<Termination>,
 }
 
-/// The pidfd, for polling: it becomes readable when the process exits.
-impl AsFd for Service {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        self.pidfd.as_fd()
-    }
-}
-
 const STAGE_SPAWN: i32 = 1;
 const STAGE_CREDENTIALS: i32 = 2;
 const STAGE_EXEC: i32 = 3;
