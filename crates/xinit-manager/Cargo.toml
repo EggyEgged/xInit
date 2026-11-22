@@ -9,3 +9,6 @@ publish.workspace = true
 
 [dependencies]
 xinit-api.workspace = true
+
+[lints]
+workspace = true

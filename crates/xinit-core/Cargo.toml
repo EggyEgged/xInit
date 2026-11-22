@@ -14,3 +14,6 @@ path = "src/main.rs"
 [dependencies]
 xinit-api.workspace = true
 xinit-manager.workspace = true
+
+[lints]
+workspace = true

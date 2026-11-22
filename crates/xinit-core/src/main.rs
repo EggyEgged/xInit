@@ -3,6 +3,18 @@
 //! Scaffolding only. No init behaviour is implemented yet, so the binary
 //! reports that and exits with a failure status instead of pretending to work.
 
+#![cfg_attr(
+    not(test),
+    forbid(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::exit,
+        clippy::todo,
+        clippy::unimplemented
+    )
+)]
+
 use std::process::ExitCode;
 
 fn main() -> ExitCode {

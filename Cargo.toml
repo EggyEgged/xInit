@@ -13,6 +13,10 @@ publish = false
 xinit-api = { path = "crates/xinit-api" }
 xinit-manager = { path = "crates/xinit-manager" }
 
+# Every #[allow] must say why: #[allow(lint, reason = "...")].
+[workspace.lints.clippy]
+allow_attributes_without_reason = "deny"
+
 [profile.release]
 # PID 1 must never unwind; a panic in Core aborts immediately so the failure is loud.
 panic = "abort"

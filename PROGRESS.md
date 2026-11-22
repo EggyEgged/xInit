@@ -18,6 +18,7 @@
 - 2026-11-22: `FROZEN` (repo root) lists frozen milestones, one per line, written by scripts/freeze-tests.sh. Once non-empty, check-frozen.sh requires tests/MANIFEST.sha256. verify-milestone M<n> fails until M<n> is in FROZEN.
 - 2026-11-22: verify-milestone fails if any test is ignored, as well as when zero tests run.
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
+- 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 
 ## Spec disputes
 (none)
@@ -32,3 +33,8 @@
     - zero tests ran
   ```
   fmt, clippy -D warnings, check-hygiene and check-frozen passed. cargo build --locked passed for both the gnu and musl targets.
+- 2026-11-22 hygiene→clippy: tested on scratch copies.
+  - clippy rejects: unwrap after a `#[cfg(test)]` + `"{"` decoy (which the old grep missed), a local `#[allow(clippy::unwrap_used, reason)]` (E0453), `#[allow]` without a reason, and `panic!` in Manager.
+  - clippy accepts: unwrap inside a `#[cfg(test)]` module.
+  - check-hygiene rejects: the crate-root attribute removed, and a crate missing `[lints] workspace = true`.
+  - OPEN DEFECT: files in the root `tests/` are never compiled. The workspace root is virtual, so no package owns them. A test there did not run; cargo test reported 0 passed. Must be fixed before M0 tests are written.

@@ -28,7 +28,7 @@ Architecture: Core is PID 1. It is small, synchronous, has no async runtime, and
 - #[ignore], assert!(true), sleeps used to wait for a condition, should_panic without an expected message.
 - Special-casing test inputs, copying expected output from tests into code, or reading tests from src.
 - Skipping a test silently. A test that cannot run must fail and say why.
-- #[allow(...)] without a // JUSTIFIED: line above it.
+- #[allow(...)] without reason = "..." (enforced by clippy::allow_attributes_without_reason). The no-panic lints in the Core and Manager crate roots are forbid, so they cannot be allowed at all outside #[cfg(test)].
 - New dependencies beyond those named in the milestone brief, unless you ask first.
 - Work outside the current milestone's scope.
 
