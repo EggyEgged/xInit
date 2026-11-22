@@ -3,9 +3,12 @@ M0 red check and self-check (blind test author, 2026-11-22)
 
 1. Red check: main suite against the xinit-api stub
 ---------------------------------------------------
-Command:  cargo test --offline --test m0        (XRGINIT_BIN unset, no binary in the blind workspace)
-Compile:  clean, no errors or warnings ("Finished `test` profile ... Executable tests/m0.rs")
-Result:   running 111 tests ... 0 passed; 111 failed  (exit 101)
+Re-run 2026-11-22 after the fmt/clippy-only fix (no test, assertion or fixture changed):
+  cargo fmt --all --check                               exit 0
+  cargo clippy --offline --all-targets -- -D warnings   exit 0
+Command:  cargo test --offline --test m0 -q -- --logfile <log>   (XRGINIT_BIN unset, no binary in the blind workspace)
+Compile:  clean, no errors or warnings ("Finished `test` profile ... Running tests/m0.rs")
+Result:   running 111 tests; libtest log: 111 "failed" lines, 0 "ok" lines; 0 passed; 111 failed  (exit 101)
 
 Failure causes (runtime panics, no compile errors):
 - 61 unit_loading tests + all API tests (pidfd_api, api_model, service_env *_api_*):
@@ -15,117 +18,117 @@ Failure causes (runtime panics, no compile errors):
     XRGINIT_BIN is not set: it must hold the absolute path of the xrginit binary under test (there is no fallback path)
 
 Per-test results (libtest --logfile):
+failed m0::cli_lifecycle::b_m0_011_usage_unknown_subcommand_frobnicate
+failed m0::cli_lifecycle::b_m0_011_usage_run_without_unit
 failed m0::cli_lifecycle::b_m0_011_usage_no_arguments
 failed m0::api_model::b_m0_029_030_031_service_state_machine_model
-failed m0::cli_lifecycle::b_m0_011_usage_run_without_unit
-failed m0::cli_lifecycle::b_m0_011_usage_unknown_subcommand_frobnicate
-failed m0::cli_lifecycle::b_m0_011_usage_run_with_two_paths
 failed m0::cli_lifecycle::b_m0_010_cli_restart_always_runs_once
-failed m0::cli_lifecycle::b_m0_012_cli_missing_file
 failed m0::cli_lifecycle::b_m0_012_cli_invalid_type
 failed m0::cli_lifecycle::b_m0_012_cli_invalid_value
+failed m0::cli_lifecycle::b_m0_012_cli_missing_file
+failed m0::cli_lifecycle::b_m0_011_usage_run_with_two_paths
 failed m0::cli_lifecycle::b_m0_012_cli_missing_key
+failed m0::cli_lifecycle::b_m0_012_cli_schema_version
 failed m0::cli_lifecycle::b_m0_012_cli_unknown_key
-failed m0::cli_lifecycle::b_m0_012_cli_unsupported_service_type
 failed m0::cli_lifecycle::b_m0_012_cli_syntax_error
-failed m0::cli_lifecycle::b_m0_013_relative_unit_path
+failed m0::cli_lifecycle::b_m0_012_cli_unsupported_service_type
 failed m0::cli_lifecycle::b_m0_013_successful_run
+failed m0::cli_lifecycle::b_m0_014_nonzero_exit_is_failed
+failed m0::cli_lifecycle::b_m0_013_relative_unit_path
+failed m0::cli_lifecycle::b_m0_016_cli_command_not_found
 failed m0::cli_lifecycle::b_m0_017_sigint_requested_stop
 failed m0::cli_lifecycle::b_m0_017_sigterm_requested_stop
-failed m0::cli_lifecycle::b_m0_012_cli_schema_version
-failed m0::cli_lifecycle::b_m0_015_killed_by_foreign_sigkill
 failed m0::cli_lifecycle::b_m0_016_cli_not_executable_eacces
-failed m0::pidfd_api::b_m0_029_pid_names_the_started_process
-failed m0::cli_lifecycle::b_m0_016_cli_command_not_found
+failed m0::cli_lifecycle::b_m0_015_killed_by_foreign_sigkill
 failed m0::cli_lifecycle::b_m0_017_further_signals_during_stop_change_nothing
-failed m0::cli_lifecycle::b_m0_014_nonzero_exit_is_failed
 failed m0::cli_lifecycle::b_m0_018_service_ignores_sigterm_escalates
-failed m0::pidfd_api::b_m0_030_signal_after_reap_fails_and_reaches_nobody
+failed m0::cli_lifecycle::b_m0_017_stop_records_exit_code
+failed m0::cli_lifecycle::b_m0_019_double_fork_grandchild_untracked
+failed m0::pidfd_api::b_m0_016_b_m0_032_api_exec_enoent_no_child
+failed m0::pidfd_api::b_m0_031_stop_without_escalation
 failed m0::pidfd_api::b_m0_030_signal_numbers_term_and_int
 failed m0::pidfd_api::b_m0_031_default_stop_timeout_is_5000_ms_and_used_by_stop
-failed m0::cli_lifecycle::b_m0_019_double_fork_grandchild_untracked
-failed m0::service_env::b_m0_021_signal_state_reset_plain_start
-failed m0::service_env::b_m0_021_signal_state_reset_with_inherited_ignores
-failed m0::cli_lifecycle::b_m0_017_stop_records_exit_code
+failed m0::pidfd_api::b_m0_030_signal_after_reap_fails_and_reaches_nobody
 failed m0::pidfd_api::b_m0_016_b_m0_032_api_exec_eacces_no_child
-failed m0::pidfd_api::b_m0_016_b_m0_032_api_exec_enoent_no_child
-failed m0::service_env::b_m0_025_api_unknown_user_no_child
-failed m0::service_env::b_m0_026_api_same_user_starts
-failed m0::pidfd_api::b_m0_031_stop_without_escalation
-failed m0::pidfd_api::b_m0_029_start_and_wait_exit_7
-failed m0::service_env::b_m0_026_api_other_user_credentials_no_child
-failed m0::service_env::b_m0_020_argv_passed_verbatim
-failed m0::service_env::b_m0_025_cli_unknown_user
-failed m0::service_env::b_m0_023_only_fds_0_1_2_open
 failed m0::service_env::b_m0_022_new_session_and_process_group
+failed m0::service_env::b_m0_021_signal_state_reset_plain_start
+failed m0::pidfd_api::b_m0_029_start_and_wait_exit_7
+failed m0::pidfd_api::b_m0_029_pid_names_the_started_process
 failed m0::pidfd_api::b_m0_031_stop_escalates_after_timeout
+failed m0::service_env::b_m0_021_signal_state_reset_with_inherited_ignores
 failed m0::service_env::b_m0_024_identity_cwd_and_env_inherited
-failed m0::service_env::b_m0_026_cli_other_user_credentials_eperm
-failed m0::service_env::b_m0_026_cli_same_user_runs_unchanged
+failed m0::service_env::b_m0_023_only_fds_0_1_2_open
+failed m0::unit_loading::b_m0_001_minimal_unit_via_load_unit
+failed m0::service_env::b_m0_020_argv_passed_verbatim
 failed m0::unit_loading::b_m0_001_minimal_unit_spec_example
 failed m0::unit_loading::b_m0_001_tables_in_other_order
 failed m0::unit_loading::b_m0_002_all_optional_fields
 failed m0::unit_loading::b_m0_002_empty_dependencies_and_restart_tables
 failed m0::unit_loading::b_m0_003_schema_version_absent
-failed m0::unit_loading::b_m0_001_minimal_unit_via_load_unit
-failed m0::unit_loading::b_m0_003_schema_version_zero
-failed m0::unit_loading::b_m0_003_schema_version_string
-failed m0::unit_loading::b_m0_003_schema_version_negative
 failed m0::unit_loading::b_m0_003_schema_version_float
+failed m0::unit_loading::b_m0_003_schema_version_negative
+failed m0::unit_loading::b_m0_003_schema_version_string
+failed m0::unit_loading::b_m0_003_schema_version_zero
 failed m0::unit_loading::b_m0_003_schema_version_two
 failed m0::unit_loading::b_m0_004_unknown_key_execution_comand
-failed m0::unit_loading::b_m0_004_unknown_sub_table_of_service
 failed m0::unit_loading::b_m0_004_unknown_key_in_execution
 failed m0::unit_loading::b_m0_004_unknown_key_in_service
-failed m0::unit_loading::b_m0_005_missing_execution_table
-failed m0::unit_loading::b_m0_005_missing_service_name
+failed m0::unit_loading::b_m0_004_unknown_sub_table_of_service
+failed m0::unit_loading::b_m0_004_unknown_top_level_table
 failed m0::unit_loading::b_m0_004_unknown_top_level_key
 failed m0::unit_loading::b_m0_005_missing_execution_command
-failed m0::unit_loading::b_m0_006_command_is_string
-failed m0::unit_loading::b_m0_006_command_element_not_string
-failed m0::unit_loading::b_m0_004_unknown_top_level_table
-failed m0::unit_loading::b_m0_006_name_is_integer
-failed m0::unit_loading::b_m0_005_missing_service_type
-failed m0::unit_loading::b_m0_006_description_is_bool
+failed m0::unit_loading::b_m0_005_missing_execution_table
+failed m0::unit_loading::b_m0_005_missing_service_name
 failed m0::unit_loading::b_m0_005_missing_service_table
+failed m0::unit_loading::b_m0_005_missing_service_type
+failed m0::unit_loading::b_m0_006_command_element_not_string
+failed m0::unit_loading::b_m0_006_command_is_string
+failed m0::unit_loading::b_m0_006_description_is_bool
+failed m0::unit_loading::b_m0_006_name_is_integer
+failed m0::unit_loading::b_m0_006_provides_is_string
 failed m0::unit_loading::b_m0_006_type_is_integer
 failed m0::unit_loading::b_m0_006_user_is_integer
+failed m0::unit_loading::b_m0_007_bogus_type_unsupported
 failed m0::unit_loading::b_m0_007_capitalised_simple_unsupported
 failed m0::unit_loading::b_m0_008_command_dot_relative
-failed m0::unit_loading::b_m0_007_bogus_type_unsupported
 failed m0::unit_loading::b_m0_008_command_empty
-failed m0::unit_loading::b_m0_006_provides_is_string
 failed m0::unit_loading::b_m0_008_command_relative
 failed m0::unit_loading::b_m0_008_command_single_absolute_element_ok
 failed m0::unit_loading::b_m0_008_name_64_chars_ok
 failed m0::unit_loading::b_m0_008_name_65_chars_invalid
-failed m0::unit_loading::b_m0_008_name_leading_dot_invalid
 failed m0::unit_loading::b_m0_008_name_empty
+failed m0::unit_loading::b_m0_008_name_leading_dot_invalid
 failed m0::unit_loading::b_m0_008_name_leading_hyphen_invalid
-failed m0::unit_loading::b_m0_008_user_empty
 failed m0::unit_loading::b_m0_008_name_with_all_allowed_classes_ok
 failed m0::unit_loading::b_m0_008_name_with_space_and_capital
-failed m0::unit_loading::b_m0_009_syntax_error
+failed m0::unit_loading::b_m0_008_user_empty
 failed m0::unit_loading::b_m0_009_load_missing_file_enoent
 failed m0::unit_loading::b_m0_009_load_file_with_syntax_error
-failed m0::unit_loading::b_m0_010_after_empty_name
+failed m0::unit_loading::b_m0_009_syntax_error
 failed m0::unit_loading::b_m0_010_after_element_integer
-failed m0::unit_loading::b_m0_010_full_dependencies_and_restart
+failed m0::unit_loading::b_m0_010_after_empty_name
 failed m0::unit_loading::b_m0_010_after_only
-failed m0::unit_loading::b_m0_010_maximum_restarts_string
 failed m0::unit_loading::b_m0_010_maximum_restarts_negative
+failed m0::unit_loading::b_m0_010_full_dependencies_and_restart
+failed m0::unit_loading::b_m0_010_maximum_restarts_string
 failed m0::unit_loading::b_m0_010_policy_always_default_count
 failed m0::unit_loading::b_m0_010_policy_bogus
 failed m0::unit_loading::b_m0_010_policy_capitalised
 failed m0::unit_loading::b_m0_010_policy_integer
 failed m0::unit_loading::b_m0_010_policy_no_explicit
-failed m0::unit_loading::b_m0_010_requires_is_string
 failed m0::unit_loading::b_m0_010_requires_capitalised_name
+failed m0::unit_loading::b_m0_010_requires_is_string
 failed m0::unit_loading::b_m0_010_unknown_key_in_dependencies
 failed m0::unit_loading::b_m0_010_unknown_key_in_restart
+failed m0::service_env::b_m0_025_api_unknown_user_no_child
+failed m0::service_env::b_m0_026_api_other_user_credentials_no_child
+failed m0::service_env::b_m0_026_api_same_user_starts
 failed m0::xrginit_process::b_m0_028_invalid_utf8_path
-failed m0::xrginit_process::b_m0_028_quoted_path_escapes
 failed m0::xrginit_process::b_m0_027_xrginit_signal_dispositions
+failed m0::xrginit_process::b_m0_028_quoted_path_escapes
+failed m0::service_env::b_m0_026_cli_other_user_credentials_eperm
+failed m0::service_env::b_m0_026_cli_same_user_runs_unchanged
+failed m0::service_env::b_m0_025_cli_unknown_user
 
 Passing tests against the stub: none. One test was removed before the red run because
 it would have passed against the stub: a self-test of the B-M0-028 format checker

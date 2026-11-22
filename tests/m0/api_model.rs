@@ -10,6 +10,7 @@
 //!   Err(Os{ESRCH=3}) (the spec gives Exited only after the reap). `wait()` ->
 //!   Signaled(n) with n one of the signals sent; then Reaped(that termination).
 //! - Reaped(t): `signal(_)` -> Err(Exited); `wait()` -> Ok(t) again, without blocking.
+//!
 //! Operations the spec leaves open are never generated: `wait` while Running (blocks
 //! forever), `stop` while Dying or Reaped.
 //! Invariants after every step: `pid()` never changes; Running => /proc shows the same
@@ -68,10 +69,15 @@ fn choose(rng: &mut Rng, m: &Model) -> Op {
 
 fn run_case(seed: u64, steps: usize) {
     let mut rng = Rng(seed);
-    let exec = ExecutionSection { command: vec!["/usr/bin/sleep".into(), "60".into()], user: None };
-    let mut svc = Service::start(&exec).unwrap_or_else(|e| panic!("seed {seed}: start failed: {e:?}"));
+    let exec = ExecutionSection {
+        command: vec!["/usr/bin/sleep".into(), "60".into()],
+        user: None,
+    };
+    let mut svc =
+        Service::start(&exec).unwrap_or_else(|e| panic!("seed {seed}: start failed: {e:?}"));
     let pid = svc.pid();
-    let st = start_time(pid).unwrap_or_else(|| panic!("seed {seed}: /proc/{pid} missing right after start"));
+    let st = start_time(pid)
+        .unwrap_or_else(|| panic!("seed {seed}: /proc/{pid} missing right after start"));
     let mut model = Model::Running;
     let mut trace: Vec<String> = Vec::new();
     for _ in 0..steps {
@@ -84,7 +90,12 @@ fn run_case(seed: u64, steps: usize) {
                 m
             }
             (Op::Signal(s), Model::Running) => {
-                assert_eq!(svc.signal(s), Ok(()), "B-M0-030: signal while running; {}", ctx());
+                assert_eq!(
+                    svc.signal(s),
+                    Ok(()),
+                    "B-M0-030: signal while running; {}",
+                    ctx()
+                );
                 Model::Dying(vec![signum(s)])
             }
             (Op::Signal(s), Model::Dying(mut sent)) => {
@@ -98,31 +109,50 @@ fn run_case(seed: u64, steps: usize) {
                 Model::Dying(sent)
             }
             (Op::Signal(s), Model::Reaped(t)) => {
-                assert_eq!(svc.signal(s), Err(SignalError::Exited), "B-M0-030/I-1: signal after reap; {}", ctx());
+                assert_eq!(
+                    svc.signal(s),
+                    Err(SignalError::Exited),
+                    "B-M0-030/I-1: signal after reap; {}",
+                    ctx()
+                );
                 Model::Reaped(t)
             }
             (Op::Wait, Model::Dying(sent)) => {
                 let r = svc.wait();
                 let t = match r {
                     Ok(Termination::Signaled(n)) if sent.contains(&n) => Termination::Signaled(n),
-                    other => panic!("B-M0-029/030: wait gave {other:?}, expected Signaled(one of {sent:?}); {}", ctx()),
+                    other => panic!(
+                        "B-M0-029/030: wait gave {other:?}, expected Signaled(one of {sent:?}); {}",
+                        ctx()
+                    ),
                 };
                 Model::Reaped(t)
             }
             (Op::Wait, Model::Reaped(t)) => {
-                assert_eq!(svc.wait(), Ok(t), "B-M0-029: repeated wait returns the same result; {}", ctx());
+                assert_eq!(
+                    svc.wait(),
+                    Ok(t),
+                    "B-M0-029: repeated wait returns the same result; {}",
+                    ctx()
+                );
                 Model::Reaped(t)
             }
             (Op::Stop, Model::Running) => {
                 let r = svc.stop(Duration::from_secs(5));
-                let want = StopOutcome { termination: Termination::Signaled(15), escalated: false };
+                let want = StopOutcome {
+                    termination: Termination::Signaled(15),
+                    escalated: false,
+                };
                 assert_eq!(r, Ok(want), "B-M0-031: stop of sleep; {}", ctx());
                 Model::Reaped(Termination::Signaled(15))
             }
             (op, m) => unreachable!("generator produced {op:?} in {m:?}"),
         };
         match &model {
-            Model::Running => assert!(is_live(pid, st), "service must still be alive; seed {seed}, trace {trace:?}"),
+            Model::Running => assert!(
+                is_live(pid, st),
+                "service must still be alive; seed {seed}, trace {trace:?}"
+            ),
             Model::Reaped(_) => assert!(
                 !same_process_exists(pid, st),
                 "B-M0-029: /proc/{pid} still refers to the reaped process; seed {seed}, trace {trace:?}"
@@ -133,8 +163,16 @@ fn run_case(seed: u64, steps: usize) {
     // Leave nothing behind, and check the model's final transition too.
     match model {
         Model::Running => {
-            assert_eq!(svc.signal(Signal::Kill), Ok(()), "seed {seed}: cleanup signal");
-            assert_eq!(svc.wait(), Ok(Termination::Signaled(9)), "seed {seed}: cleanup wait");
+            assert_eq!(
+                svc.signal(Signal::Kill),
+                Ok(()),
+                "seed {seed}: cleanup signal"
+            );
+            assert_eq!(
+                svc.wait(),
+                Ok(Termination::Signaled(9)),
+                "seed {seed}: cleanup wait"
+            );
         }
         Model::Dying(sent) => {
             let r = svc.wait();
@@ -145,7 +183,10 @@ fn run_case(seed: u64, steps: usize) {
         }
         Model::Reaped(_) => {}
     }
-    assert!(!same_process_exists(pid, st), "seed {seed}: process not reaped at the end");
+    assert!(
+        !same_process_exists(pid, st),
+        "seed {seed}: process not reaped at the end"
+    );
 }
 
 // spec: B-M0-029, B-M0-030, B-M0-031, I-1 (state-machine model, 24 fixed seeds x 8 steps)
