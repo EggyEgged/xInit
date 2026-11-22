@@ -1,1 +1,98 @@
-[]
+[
+  {
+    "id": "M0-unit-parse",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-001",
+      "B-M0-002",
+      "B-M0-003",
+      "B-M0-004",
+      "B-M0-005",
+      "B-M0-006",
+      "B-M0-007",
+      "B-M0-008",
+      "B-M0-009",
+      "B-M0-010"
+    ],
+    "description": "Unit file schema 1 parsing, including [dependencies] and [restart], and typed unit errors, unknown keys rejected",
+    "passes": false
+  },
+  {
+    "id": "M0-cli-log",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-011",
+      "B-M0-012",
+      "B-M0-028"
+    ],
+    "description": "CLI usage, invalid-unit handling, exit codes and structured stderr log format",
+    "passes": false
+  },
+  {
+    "id": "M0-lifecycle",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-013",
+      "B-M0-014",
+      "B-M0-015",
+      "B-M0-016"
+    ],
+    "description": "Start, state reporting, reaping, failure and command-not-found handling",
+    "passes": false
+  },
+  {
+    "id": "M0-stop",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-017",
+      "B-M0-018"
+    ],
+    "description": "Requested stop: SIGTERM, 5000 ms timeout, SIGKILL escalation with exit signal recorded",
+    "passes": false
+  },
+  {
+    "id": "M0-double-fork",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-019"
+    ],
+    "description": "Documented limitation: only the direct child is tracked",
+    "passes": false
+  },
+  {
+    "id": "M0-child-setup",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-020",
+      "B-M0-021",
+      "B-M0-022",
+      "B-M0-023",
+      "B-M0-024",
+      "B-M0-025",
+      "B-M0-026"
+    ],
+    "description": "Service process setup: argv, signal reset, setsid, fds, inherited identity, unknown user, known-user credentials",
+    "passes": false
+  },
+  {
+    "id": "M0-own-signals",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-027"
+    ],
+    "description": "xrginit changes dispositions only for signals it acts on",
+    "passes": false
+  },
+  {
+    "id": "M0-pidfd-api",
+    "milestone": "M0",
+    "clause_ids": [
+      "B-M0-029",
+      "B-M0-030",
+      "B-M0-031",
+      "B-M0-032"
+    ],
+    "description": "pidfd-tracked Service API: wait, signal after reap fails, stop escalation, no leftover child",
+    "passes": false
+  }
+]

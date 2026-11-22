@@ -3,7 +3,7 @@
 ## Milestone table
 | Milestone | Spec | Tests frozen | Implemented | verify-milestone | Notes |
 |---|---|---|---|---|---|
-| M0 | no | no | no | not run | |
+| M0 | spec final, 32 clauses, 0 OPEN | no | no | not run | specs/M0.md; xinit-api stub not yet written (Q4) |
 | M1 | no | no | no | not run | |
 | M2 | no | no | no | not run | |
 | M3 | no | no | no | not run | |
