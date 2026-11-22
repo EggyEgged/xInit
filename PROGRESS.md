@@ -3,7 +3,7 @@
 ## Milestone table
 | Milestone | Spec | Tests frozen | Implemented | verify-milestone | Notes |
 |---|---|---|---|---|---|
-| M0 | spec final, 32 clauses, 0 OPEN | no | no | not run | specs/M0.md; xinit-api stub matches final spec 3ca7927 |
+| M0 | spec final, 32 clauses, 0 OPEN | yes (111 tests, e6bc4df) | no | not run | specs/M0.md; xinit-api stub matches final spec 3ca7927 |
 | M1 | no | no | no | not run | |
 | M2 | no | no | no | not run | |
 | M3 | no | no | no | not run | |
@@ -34,6 +34,14 @@ Setup checks, 2026-11-22: main clean and equal to origin/main (77b8833); gh auth
 ### Session log
 | Date | Milestone | Role | Exit | Outcome |
 |---|---|---|---|---|
+| 2026-11-22 | M0 | test author (run 1) | 1 | Usage limit hit after 65 turns; 12 Bash calls refused by the tool limits. Workspace discarded; partial holdout kept for run 2 to review. |
+| 2026-11-22 | M0 | test author (run 2) | 0 | 111 tests, 0 passed / 111 failed on stub; holdout 19 tests; 3 wrong stop impls caught. Prompt had an added harness note (one cargo command per call). |
+| 2026-11-22 | M0 | orchestrator Phase 2 | 0 | Only tests/, specs/red, specs/trace changed; 111/111 runtime failures, 0 compile errors; 111 tests cite a clause; hygiene OK; 32/32 clauses traced; frozen (9 files). |
+
+### Spec notes from the M0 test author (not blocking, not OPEN)
+1. B-M0-026: a root-only success test and the unprivileged EPERM test cannot both pass in one environment. The root test is omitted and listed Untested.
+2. B-M0-027: Rust's runtime installs SIGSEGV and SIGBUS handlers by default, which the clause forbids. The implementation must remove them, or the spec must allow them.
+3. B-M0-018: the spec's example command races (xrginit may log `running` before the shell sets its trap). The tests use a FIFO readiness signal; the spec example should too.
 
 ## Spec disputes
 (none)
