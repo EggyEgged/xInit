@@ -1,13 +1,15 @@
 //! Public types and function signatures for xInit.
 //!
-//! The spec writer adds items here. Function bodies stay `unimplemented!()`
-//! until the implementer session for the owning milestone fills them in.
-//!
 //! M0 items follow specs/M0.md, section "Public surface".
 
 use std::fmt;
 use std::path::Path;
 use std::time::Duration;
+
+mod service;
+mod unit;
+
+pub use service::Service;
 
 /// The only unit file schema version M0 accepts. Spec: B-M0-003.
 pub const SCHEMA_VERSION: i64 = 1;
@@ -19,18 +21,29 @@ pub const DEFAULT_STOP_TIMEOUT: Duration = Duration::from_millis(5000);
 ///
 /// # Errors
 /// Returns the [`UnitError`] for the unit's defect (B-M0-003 to B-M0-010).
-#[expect(unused_variables, reason = "stub body; remove when implemented")]
 pub fn parse_unit(text: &str) -> Result<Unit, UnitError> {
-    unimplemented!()
+    unit::parse(text)
 }
 
 /// Reads the file at `path` and parses it with [`parse_unit`]. Spec: B-M0-009, B-M0-012.
 ///
 /// # Errors
 /// [`UnitError::Io`] if the file cannot be read, otherwise as [`parse_unit`].
-#[expect(unused_variables, reason = "stub body; remove when implemented")]
 pub fn load_unit(path: &Path) -> Result<Unit, UnitError> {
-    unimplemented!()
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => {
+            return Err(UnitError::Io {
+                errno: match e.raw_os_error() {
+                    Some(n) => n,
+                    None => libc::EIO,
+                },
+            });
+        }
+    };
+    // TOML text must be UTF-8 (TOML 1.0, "Spec"), so invalid UTF-8 is a syntax error.
+    let text = String::from_utf8(bytes).map_err(|_| UnitError::Syntax)?;
+    parse_unit(&text)
 }
 
 /// A parsed unit file. Spec: B-M0-001, B-M0-002, B-M0-010.
@@ -148,55 +161,6 @@ pub enum UnitError {
     },
 }
 
-/// One started process, tracked by pidfd. Fields are private; obtain one only
-/// from [`Service::start`]. Spec: B-M0-016, B-M0-029 to B-M0-032, I-1.
-#[derive(Debug)]
-pub struct Service {
-    _private: (),
-}
-
-impl Service {
-    /// Starts the command in `exec`. Spec: B-M0-016, B-M0-020 to B-M0-026, B-M0-029, B-M0-032.
-    ///
-    /// # Errors
-    /// A [`StartError`]; the caller then has no new child (B-M0-032).
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
-    pub fn start(exec: &ExecutionSection) -> Result<Service, StartError> {
-        unimplemented!()
-    }
-
-    /// The service's pid. Spec: B-M0-029, B-M0-030.
-    pub fn pid(&self) -> u32 {
-        unimplemented!()
-    }
-
-    /// Sends `sig` through the pidfd. Spec: B-M0-030, I-1.
-    ///
-    /// # Errors
-    /// [`SignalError::Exited`] after the process was reaped, otherwise [`SignalError::Os`].
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
-    pub fn signal(&self, sig: Signal) -> Result<(), SignalError> {
-        unimplemented!()
-    }
-
-    /// Blocks until the process is reaped; later calls return the same result. Spec: B-M0-029, B-M0-030.
-    ///
-    /// # Errors
-    /// [`WaitError::Os`] on an OS failure.
-    pub fn wait(&mut self) -> Result<Termination, WaitError> {
-        unimplemented!()
-    }
-
-    /// Sends SIGTERM, then SIGKILL after `timeout`. Spec: B-M0-031.
-    ///
-    /// # Errors
-    /// [`WaitError::Os`] on an OS failure.
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
-    pub fn stop(&mut self, timeout: Duration) -> Result<StopOutcome, WaitError> {
-        unimplemented!()
-    }
-}
-
 /// A signal the API can send. Spec: B-M0-030.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
@@ -276,9 +240,30 @@ pub enum WaitError {
 
 /// Human-readable message. Tests must not assert this text. Spec: B-M0-003 to B-M0-010, B-M0-012.
 impl fmt::Display for UnitError {
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
+        match self {
+            UnitError::Io { errno } => {
+                write!(
+                    f,
+                    "cannot read unit file: {}",
+                    std::io::Error::from_raw_os_error(*errno)
+                )
+            }
+            UnitError::Syntax => f.write_str("TOML syntax error"),
+            UnitError::SchemaVersion { found } => {
+                write!(
+                    f,
+                    "unsupported schema_version {found}, expected {SCHEMA_VERSION}"
+                )
+            }
+            UnitError::UnknownKey { key } => write!(f, "unknown key {key}"),
+            UnitError::MissingKey { key } => write!(f, "missing required key {key}"),
+            UnitError::InvalidType { key } => write!(f, "wrong TOML type for {key}"),
+            UnitError::InvalidValue { key } => write!(f, "invalid value for {key}"),
+            UnitError::UnsupportedServiceType { value } => {
+                write!(f, "unsupported service type {value:?}")
+            }
+        }
     }
 }
 
@@ -287,9 +272,16 @@ impl std::error::Error for UnitError {}
 
 /// Human-readable message. Tests must not assert this text. Spec: B-M0-016, B-M0-025, B-M0-026.
 impl fmt::Display for StartError {
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
+        let os = |n: i32| std::io::Error::from_raw_os_error(n);
+        match self {
+            StartError::Exec { errno } => write!(f, "exec failed: {}", os(*errno)),
+            StartError::UserUnknown { user } => write!(f, "unknown user {user:?}"),
+            StartError::Credentials { errno } => {
+                write!(f, "credential change failed: {}", os(*errno))
+            }
+            StartError::Spawn { errno } => write!(f, "cannot create process: {}", os(*errno)),
+        }
     }
 }
 
@@ -298,9 +290,15 @@ impl std::error::Error for StartError {}
 
 /// Human-readable message. Tests must not assert this text. Spec: B-M0-030.
 impl fmt::Display for SignalError {
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
+        match self {
+            SignalError::Exited => f.write_str("process already reaped; no signal sent"),
+            SignalError::Os { errno } => write!(
+                f,
+                "signal failed: {}",
+                std::io::Error::from_raw_os_error(*errno)
+            ),
+        }
     }
 }
 
@@ -309,9 +307,14 @@ impl std::error::Error for SignalError {}
 
 /// Human-readable message. Tests must not assert this text. Spec: B-M0-029, B-M0-031.
 impl fmt::Display for WaitError {
-    #[expect(unused_variables, reason = "stub body; remove when implemented")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
+        match self {
+            WaitError::Os { errno } => write!(
+                f,
+                "wait failed: {}",
+                std::io::Error::from_raw_os_error(*errno)
+            ),
+        }
     }
 }
 

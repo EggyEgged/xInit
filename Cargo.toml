@@ -42,6 +42,8 @@ publish = false
 [workspace.dependencies]
 xinit-api = { path = "crates/xinit-api" }
 xinit-manager = { path = "crates/xinit-manager" } # blind-drop
+libc = "0.2.191"
+toml = { version = "1.2.2", default-features = false, features = ["std", "parse", "serde"] }
 
 # Every #[allow] must say why: #[allow(lint, reason = "...")].
 [workspace.lints.clippy]

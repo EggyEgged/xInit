@@ -3,7 +3,7 @@
 ## Milestone table
 | Milestone | Spec | Tests frozen | Implemented | verify-milestone | Notes |
 |---|---|---|---|---|---|
-| M0 | spec final, 32 clauses, 0 OPEN | yes (111 tests, e6bc4df) | no | not run | specs/M0.md; xinit-api stub matches final spec 3ca7927 |
+| M0 | spec final, 32 clauses, 0 OPEN | yes (111 tests, e6bc4df) | yes (m0/impl) | FAILED (2): fmt, clippy on frozen tests only; 114/114 tests pass | specs/M0.md; see Spec disputes D-1, D-2 |
 | M1 | no | no | no | not run | |
 | M2 | no | no | no | not run | |
 | M3 | no | no | no | not run | |
@@ -22,6 +22,15 @@
 - 2026-11-22: Tests find the binary only through XRGINIT_BIN (absolute path), read by the helper `xrginit_bin()` in tests/common/mod.rs, which panics loudly if it is unusable. There is no fallback path. See specs/ARCHITECTURE.md.
 - 2026-11-22: verify-milestone always builds xrginit (--locked, dev profile) and overwrites XRGINIT_BIN with its absolute path. It prints the path and sha256. A failed build stops the gate before any test runs. The holdout suite gets the same XRGINIT_BIN.
 - 2026-11-22: check-hygiene.sh also rejects `should_panic` without `expected` (from the Forbidden list in CLAUDE.md).
+- 2026-11-22 (M0 impl): Dependencies pinned after `cargo info`: libc 0.2.191 (1.0 is alpha only), toml 1.2.2 with features std, parse, serde. `toml::Table`/`Value` are gated behind toml's `serde` feature, which pulls in serde_core (brief allows serde).
+- 2026-11-22 (M0 impl): `Service` lives in xinit-api (the tests use it in-process); the `run` CLI and log format live in xinit-manager (`cli`, `log`); Core's main only forwards argv and the exit code.
+- 2026-11-22 (M0 impl): The child is created with raw clone3(CLONE_PIDFD), so pid and pidfd come from one syscall and no pid is ever signalled. Between clone3 and exec the child uses only raw syscalls (rt_sigaction, rt_sigprocmask, setsid, setgroups, setgid, setuid, close_range(CLOEXEC), execve), never glibc wrappers that consult process-wide state. A close-on-exec pipe reports (stage, errno); EOF means exec succeeded, so `running` is logged only after exec (B-M0-013).
+- 2026-11-22 (M0 impl): Child setup failures other than credentials and exec (signal reset, setsid, close_range), and an argv element with an interior NUL / empty argv given directly to the API, map to: NUL or empty command -> `Exec{EINVAL}`/`Exec{ENOENT}`; setup syscalls -> `Spawn{errno}`. /etc/passwd missing -> `UserUnknown`; unreadable for another reason -> `Credentials{errno}`.
+- 2026-11-22 (M0 impl): Supplementary groups for a credential change are exactly the /etc/group entries that list the user as a member (spec wording "groups from /etc/group"); the primary gid is not added. Malformed /etc/group lines are skipped. Untested unprivileged (B-M0-026 root path is Untested).
+- 2026-11-22 (M0 impl): B-M0-027 note: xrginit resets the Rust runtime's SIGSEGV and SIGBUS handlers to SIG_DFL at start of `run`, and keeps the runtime's ignored SIGPIPE (allowed). SIGINT/SIGTERM are blocked and read from a signalfd; SIGCHLD is untouched (the pidfd is polled).
+- 2026-11-22 (M0 impl): `unit-invalid` carries `key=` only for the variants with a key field (unknown-key, missing-key, invalid-type, invalid-value); schema-version and unsupported-service-type have none. Non-UTF-8 unit file content is `Syntax`.
+- 2026-11-22 (M0 impl): `Service` implements `AsFd` (its pidfd) so the CLI can poll it with the signalfd; the pidfd stays open until drop, but `signal` after the reap returns `Exited` without touching it. This is extra public surface not listed in the spec.
+- 2026-11-22 (M0 impl): A failed write to stderr is ignored: logging is xrginit's only channel, so there is nowhere to report it, and supervision continues.
 - 2026-11-22: The no-panic/no-exit rules moved from grep to clippy. The Core and Manager crate roots carry `#![cfg_attr(not(test), forbid(clippy::unwrap_used, expect_used, panic, exit, todo, unimplemented))]`. It is forbid, not deny, because under deny a local `#[allow(..., reason)]` turns the rule off (tested). The workspace denies `clippy::allow_attributes_without_reason`, which replaces the `// JUSTIFIED:` grep. check-hygiene.sh now checks that this enforcement is still present, and keeps only its text rules for test code.
 
 ## Autopilot
@@ -44,9 +53,21 @@ Setup checks, 2026-11-22: main clean and equal to origin/main (77b8833); gh auth
 3. B-M0-018: the spec's example command races (xrginit may log `running` before the shell sets its trap). The tests use a FIFO readiness signal; the spec example should too.
 
 ## Spec disputes
-(none)
+These are gate disputes, not behaviour disputes: every M0 test passes. They block verify-milestone M0 from exiting 0, so no passes flag in features/M0.json was flipped.
+- D-1 (all M0 clauses; gate step `fmt`): the frozen files under tests/ are not rustfmt-clean, so `cargo fmt --all --check` fails on tests/common/mod.rs and every tests/m0/*.rs. No rustfmt.toml fixes it (tried max_width = 120 with use_small_heuristics = "Max": still diffs in both directions, so the files follow no single width). The implementation crates are fmt-clean. Fix needs a human: re-freeze the tests after `cargo fmt`, or scope the gate's fmt step to the crates.
+- D-2 (all M0 clauses; gate step `clippy`): `cargo clippy --workspace --all-targets -D warnings` fails with 8 lints in frozen test code: sliced_string_as_bytes (tests/common/mod.rs:385), collapsible_if (tests/common/mod.rs:613, :685; tests/m0/cli_lifecycle.rs:454), doc_lazy_continuation (tests/m0/api_model.rs:13-16). `cargo clippy -p xinit-api -p xinit-manager -p xinit-core --all-targets -- -D warnings` is clean. Fix needs a human: re-freeze with the lints fixed, or allow them for xinit-tests.
 
 ## Verification log
+- 2026-11-22 M0 baseline (before impl): `scripts/verify-milestone.sh M0` exit 1. fmt failed on frozen tests (D-1); the 111 m0 tests were red on the `unimplemented!()` stub (0 passed).
+- 2026-11-22 M0 impl: `scripts/verify-milestone.sh M0` exit 1. Summary:
+  ```
+  binary: /home/egg/Documents/Projects/xInit/target/debug/xrginit
+  tests: passed=114 failed=0 ignored=0
+  RESULT: FAILED (2)
+    - fmt: cargo fmt --all --check
+    - clippy: cargo clippy --locked --workspace --all-targets -- -D warnings
+  ```
+  Both failures are in frozen test files only (D-1, D-2). hygiene, frozen tests, build, suite listing (111 tests) and orphan check passed. Holdout SKIPPED (XINIT_HOLDOUT_DIR not set). `cargo build --locked --target x86_64-unknown-linux-musl` exit 0. Manual run of `xrginit run` on a sleep-1 unit printed starting, running pid=…, exited code=0.
 - 2026-11-22 scaffolding: `scripts/verify-milestone.sh M0` on the empty repository, rustc 1.96.0. Expected failure, which shows the gate does not pass silently:
   ```
   tests: passed=0 failed=0 ignored=0
