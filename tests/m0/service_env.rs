@@ -3,16 +3,17 @@
 //! with the no-leftover-child check of B-M0-032.
 
 use super::common::{
-    EXIT_DEADLINE, Finished, PasswdEntry, Run, SIGKILL, SIGTERM, TempDir, child_lock_exclusive,
-    child_lock_shared, children_of_self, field, passwd_entries, self_euid_egid, send_signal,
-    status_mask, status_value, unit_toml, xrginit_bin,
+    EXIT_DEADLINE, Finished, PasswdEntry, Run, SIGKILL, SIGTERM, TempDir, await_ready,
+    child_lock_exclusive, child_lock_shared, children_of_self, field, fifo, passwd_entries,
+    self_euid_egid, status_mask, status_value, unit_toml, xrginit_bin,
 };
 use std::collections::BTreeSet;
 use std::fs;
 use std::process::{Command, Stdio};
 use xinit_api::{ExecutionSection, Service, Signal, StartError, Termination};
 
-/// Ends a run whose service is `/usr/bin/sleep 60` with a requested stop.
+/// Ends a run whose service ends on SIGTERM (`/usr/bin/sleep 60`, or the B-M0-023 shell
+/// that exits 0 on TERM) with a requested stop.
 fn stop_sleeper(mut r: Run, name: &str) -> Finished {
     r.signal_xrginit(SIGTERM);
     let d = r.finish(EXIT_DEADLINE);
@@ -42,8 +43,9 @@ fn b_m0_020_argv_passed_verbatim() {
     let pid = r.wait_running();
     let cmdline = fs::read(format!("/proc/{pid}/cmdline")).expect("cmdline");
     // End the service and its sleep (same process group, pgid == P per B-M0-022).
-    send_signal(-(pid as i32), SIGKILL);
-    send_signal(pid as i32, SIGKILL);
+    // Both calls panic, naming the pid, unless it was verified as xrginit's child.
+    let _ = r.signal_service_group(SIGKILL);
+    let _ = r.signal_service(SIGKILL);
     let d = r.finish(EXIT_DEADLINE);
     // Expected bytes written out by hand from the spec.
     let want: &[u8] = b"/bin/sh\0-c\0/usr/bin/sleep 60; exit 0\0$HOME\0a b\0";
@@ -142,11 +144,27 @@ fn b_m0_022_new_session_and_process_group() {
 // --- B-M0-023 -------------------------------------------------------------
 
 // spec: B-M0-023 (xrginit inherits a non-close-on-exec fd 3, spec example)
+//
+// The service is a shell that has finished its own startup before it reports
+// readiness: the readiness write happens in a forked subshell, so the service's fd
+// table is never touched by it, and the service then only waits. Reading the fds right
+// after the running line would race the dynamic loader, which briefly holds fd 3 while
+// it loads shared libraries.
 #[test]
 fn b_m0_023_only_fds_0_1_2_open() {
     let _g = child_lock_shared();
     let t = TempDir::new();
-    let p = t.write("s.toml", &unit_toml("fds", &["/usr/bin/sleep", "60"], ""));
+    let (f, ready) = fifo(&t.path, "ready");
+    let script =
+        "trap 'kill $!; exit 0' TERM; (echo ready > \"$1\"; exec /usr/bin/sleep 60) & wait";
+    let p = t.write(
+        "s.toml",
+        &unit_toml(
+            "fds",
+            &["/bin/sh", "-c", script, "sh", f.to_str().expect("utf-8")],
+            "",
+        ),
+    );
     let mut c = Command::new("/bin/sh");
     c.arg("-c")
         .arg("exec 3</dev/null; exec \"$0\" run \"$1\"")
@@ -155,6 +173,7 @@ fn b_m0_023_only_fds_0_1_2_open() {
         .stdin(Stdio::null());
     let mut r = Run::spawn(c);
     let pid = r.wait_running();
+    await_ready(&ready, "B-M0-023");
     let fds = fd_entries(pid);
     let links: Vec<_> = (0..3)
         .map(|n| {
