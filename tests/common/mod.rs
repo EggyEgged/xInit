@@ -9,9 +9,10 @@
 //! for EOF on a pipe a service or grandchild may still hold.
 #![allow(dead_code, reason = "each suite uses a subset of the shared helpers")]
 
-use std::ffi::{CString, c_char, c_int};
+use std::ffi::{CString, c_char, c_int, c_long, c_uint, c_void};
 use std::fs;
 use std::io::{BufRead, BufReader, PipeReader, PipeWriter, Read, Write};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -104,6 +105,11 @@ pub fn children_of_self() -> Vec<u32> {
 /// Field `n` (1-based, as in proc(5)) of /proc/<pid>/stat.
 pub fn field(pid: u32, n: usize) -> Option<String> {
     let s = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    field_in(&s, n)
+}
+
+/// Field `n` (1-based, as in proc(5)) of the text of one /proc/<pid>/stat read.
+fn field_in(s: &str, n: usize) -> Option<String> {
     if n == 1 {
         return s.split_whitespace().next().map(String::from);
     }
@@ -197,13 +203,167 @@ pub const SIGTERM: i32 = 15;
 
 unsafe extern "C" {
     fn kill(pid: c_int, sig: c_int) -> c_int;
+    fn syscall(num: c_long, ...) -> c_long;
     fn mkfifo(path: *const c_char, mode: u32) -> c_int;
 }
 
-/// kill(2). Returns true on success. A negative pid names a process group.
-pub fn send_signal(pid: i32, sig: i32) -> bool {
-    // SAFETY: kill takes two plain integers and touches no memory of ours.
-    unsafe { kill(pid, sig) == 0 }
+// Syscall numbers from the unified table (identical on x86_64 and aarch64).
+const SYS_PIDFD_SEND_SIGNAL: c_long = 424;
+const SYS_PIDFD_OPEN: c_long = 434;
+/// include/uapi/linux/pidfd.h (Linux 6.9): signal the process group of the pidfd's process.
+const PIDFD_SIGNAL_PROCESS_GROUP: c_uint = 1 << 2;
+const EINVAL: i32 = 22;
+
+// Signal safety. Every pid a test signals is either its own spawned xrginit (signalled
+// through a pidfd opened before the child can be reaped) or a process the test verified
+// (`verify_child`, `verify_by_env`) and identifies by (pid, start time). Nothing ever
+// signals a pid <= 1 or a group whose id is <= 1, so a lying xrginit that reports
+// `pid=1` or `pid=0` cannot make the test signal init, every process of the user
+// (kill(-1)) or the test's own process group (kill(0)).
+
+/// pidfd_open(2) for `pid`, which must be > 1.
+fn pidfd_open(pid: u32) -> std::io::Result<OwnedFd> {
+    if pid <= 1 {
+        return Err(std::io::Error::from_raw_os_error(EINVAL));
+    }
+    let raw = c_int::try_from(pid).map_err(|_| std::io::Error::from_raw_os_error(EINVAL))?;
+    // SAFETY: pidfd_open takes a pid and a flags word (0) and touches no memory of ours.
+    let fd = unsafe { syscall(SYS_PIDFD_OPEN, raw, 0 as c_uint) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let fd = RawFd::try_from(fd).map_err(|_| std::io::Error::from_raw_os_error(EINVAL))?;
+    // SAFETY: `fd` is a descriptor the kernel has just created for us; nothing else owns it.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// pidfd_send_signal(2) with no siginfo.
+fn pidfd_send(fd: &OwnedFd, sig: i32, flags: c_uint) -> std::io::Result<()> {
+    let info: *const c_void = std::ptr::null();
+    // SAFETY: the pidfd is open for the duration of the call and the siginfo pointer is
+    // NULL, so the kernel reads no memory of ours.
+    let rc = unsafe { syscall(SYS_PIDFD_SEND_SIGNAL, fd.as_raw_fd(), sig, info, flags) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// Opens a pidfd for the verified process `(pid, start)` and checks, after opening,
+/// that the pid still names that process. Returns the pidfd and the stat text.
+fn open_verified(v: (u32, u64)) -> Result<(OwnedFd, String), String> {
+    let (pid, start) = v;
+    if pid <= 1 {
+        return Err(format!("refusing to signal pid {pid} (<= 1)"));
+    }
+    let fd = pidfd_open(pid).map_err(|e| format!("pidfd_open({pid}): {e}"))?;
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_err(|e| format!("pid {pid} is gone: {e}"))?;
+    let now = field_in(&stat, 22).and_then(|s| s.parse::<u64>().ok());
+    if now != Some(start) {
+        return Err(format!(
+            "pid {pid} no longer names the verified process (start time {now:?}, verified {start})"
+        ));
+    }
+    Ok((fd, stat))
+}
+
+/// Verifies that `pid` is a direct child of `parent` (field 4 of /proc/<pid>/stat) and
+/// returns (pid, start time) from the same read. Fails for pid <= 1.
+pub fn verify_child(pid: u32, parent: u32) -> Result<(u32, u64), String> {
+    if pid <= 1 {
+        return Err(format!("pid {pid} is <= 1"));
+    }
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_err(|e| format!("pid {pid} does not exist: {e}"))?;
+    let ppid = field_in(&stat, 4);
+    if ppid.as_deref() != Some(parent.to_string().as_str()) {
+        return Err(format!(
+            "pid {pid} is not a direct child of xrginit {parent} (its parent is {ppid:?})"
+        ));
+    }
+    let start = field_in(&stat, 22)
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| format!("pid {pid}: no start time"))?;
+    Ok((pid, start))
+}
+
+/// A unique `(key, value)` environment entry. A process whose environ carries it was
+/// started (directly or indirectly) by a command the test gave it to.
+pub fn guard_env() -> (String, String) {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    (
+        "XINIT_M0_GUARD".to_string(),
+        format!(
+            "{}-{}-{nanos}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ),
+    )
+}
+
+/// Verifies that `pid` (> 1) carries the environment entry `key=value` from
+/// [`guard_env`], and returns (pid, start time) for a later [`signal_verified`].
+pub fn verify_by_env(pid: u32, key: &str, value: &str) -> Result<(u32, u64), String> {
+    if pid <= 1 {
+        return Err(format!("pid {pid} is <= 1"));
+    }
+    let start = start_time(pid).ok_or_else(|| format!("pid {pid} does not exist"))?;
+    let env = fs::read(format!("/proc/{pid}/environ"))
+        .map_err(|e| format!("/proc/{pid}/environ: {e}"))?;
+    let want = format!("{key}={value}");
+    if !env.split(|&b| b == 0).any(|e| e == want.as_bytes()) {
+        return Err(format!("pid {pid} does not carry {want}"));
+    }
+    if start_time(pid) != Some(start) {
+        return Err(format!("pid {pid} changed while it was verified"));
+    }
+    Ok((pid, start))
+}
+
+/// Signals the verified process `(pid, start)` through a pidfd, so a recycled pid is
+/// never reached.
+pub fn signal_verified(v: (u32, u64), sig: i32) -> Result<(), String> {
+    let (fd, _) = open_verified(v)?;
+    pidfd_send(&fd, sig, 0).map_err(|e| format!("pidfd_send_signal({}, {sig}): {e}", v.0))
+}
+
+/// Signals the process group led by the verified process `(pid, start)`. Only when that
+/// process is still the leader of its own group (field 5 == pid, so pgid == pid > 1).
+pub fn signal_verified_group(v: (u32, u64), sig: i32) -> Result<(), String> {
+    let (fd, stat) = open_verified(v)?;
+    let pid = v.0;
+    if field_in(&stat, 5).as_deref() != Some(pid.to_string().as_str()) {
+        return Err(format!("pid {pid} does not lead its own process group"));
+    }
+    match pidfd_send(&fd, sig, PIDFD_SIGNAL_PROCESS_GROUP) {
+        Ok(()) => Ok(()),
+        // Kernels before 6.9 do not know the flag: fall back to kill(-pgid), still
+        // guarded by the checks above (pgid == verified leader pid > 1).
+        Err(e) if e.raw_os_error() == Some(EINVAL) => kill_group(pid, sig),
+        Err(e) => Err(format!("pidfd_send_signal(group {pid}, {sig}): {e}")),
+    }
+}
+
+/// kill(-pgid, sig) for pgid > 1. The only raw kill(2) call in the suite.
+fn kill_group(pgid: u32, sig: i32) -> Result<(), String> {
+    let g = c_int::try_from(pgid).map_err(|_| format!("pgid {pgid} out of range"))?;
+    if g <= 1 {
+        return Err(format!("refusing to signal process group {pgid} (<= 1)"));
+    }
+    // SAFETY: kill takes two plain integers and touches no memory of ours; -g < -1.
+    if unsafe { kill(-g, sig) } == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "kill(-{g}, {sig}): {}",
+            std::io::Error::last_os_error()
+        ))
+    }
 }
 
 /// Creates a FIFO and a thread that reads it to the end. The receiver yields the
@@ -561,7 +721,12 @@ pub struct Run {
     exit: Option<(ExitStatus, Instant)>,
     err_done: bool,
     out_done: bool,
-    /// (pid, start time) of the service, recorded when its `running` line is seen.
+    /// pidfd of xrginit, opened before the child can be reaped.
+    xr_fd: OwnedFd,
+    /// The pid of the first `running` line, as xrginit reported it (unverified).
+    pub reported: Option<u32>,
+    /// (pid, start time) of the service, recorded when its `running` line is seen and
+    /// only if that pid was then a direct child of this xrginit (`verify_child`).
     pub service: Option<(u32, u64)>,
 }
 
@@ -593,6 +758,13 @@ impl Run {
             .unwrap_or_else(|e| panic!("cannot spawn {:?}: {e}", cmd.get_program()));
         drop(cmd);
         let pid = child.id();
+        // The child is not reaped before the waiter thread below starts, so this pidfd
+        // refers to it and never to a recycled pid.
+        let xr_fd = pidfd_open(pid).unwrap_or_else(|e| {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("test requirement: pidfd_open({pid}) failed: {e} (pidfd support, Linux 5.3+)")
+        });
         let (tx, rx) = mpsc::channel();
         let (s1, t1) = (sentinel.clone(), tx.clone());
         thread::spawn(move || pump(err_r, s1, t1, true));
@@ -615,8 +787,35 @@ impl Run {
             exit: None,
             err_done: false,
             out_done: false,
+            xr_fd,
+            reported: None,
             service: None,
         }
+    }
+
+    /// The verified service (pid, start time). Panics, naming the pid, when the pid of
+    /// the running line was not verified as a direct child of this xrginit: the test
+    /// then refuses to signal it.
+    pub fn service_verified(&self) -> (u32, u64) {
+        self.service.unwrap_or_else(|| {
+            panic!(
+                "refusing to signal the service: pid {:?} from the running line was not verified \
+                 as a direct child of xrginit {} (B-M0-013, B-M0-019)\n{}",
+                self.reported,
+                self.pid,
+                self.describe()
+            )
+        })
+    }
+
+    /// Signals the verified service process (see [`Run::service_verified`]).
+    pub fn signal_service(&self, sig: i32) -> Result<(), String> {
+        signal_verified(self.service_verified(), sig)
+    }
+
+    /// Signals the process group led by the verified service (B-M0-022: pgid == P).
+    pub fn signal_service_group(&self, sig: i32) -> Result<(), String> {
+        signal_verified_group(self.service_verified(), sig)
     }
 
     fn handle(&mut self, m: Msg) {
@@ -664,11 +863,9 @@ impl Run {
             self.describe()
         );
         let t = Instant::now();
-        assert!(
-            send_signal(self.pid as i32, sig),
-            "kill({}, {sig}) failed",
-            self.pid
-        );
+        if let Err(e) = pidfd_send(&self.xr_fd, sig, 0) {
+            panic!("signal {sig} to xrginit {} failed: {e}", self.pid);
+        }
         t
     }
 
@@ -687,10 +884,11 @@ impl Run {
                     )
                 });
                 if line.state().as_deref() == Some("running")
-                    && self.service.is_none()
+                    && self.reported.is_none()
                     && let Some(pid) = line.get("pid").and_then(|p| p.parse::<u32>().ok())
                 {
-                    self.service = start_time(pid).map(|s| (pid, s));
+                    self.reported = Some(pid);
+                    self.service = verify_child(pid, self.pid).ok();
                 }
                 if pred(&line) {
                     return line;
@@ -778,13 +976,14 @@ impl Drop for Run {
             self.handle(m);
         }
         if self.exit.is_none() {
-            send_signal(self.pid as i32, SIGKILL);
+            let _ = pidfd_send(&self.xr_fd, SIGKILL, 0);
         }
-        if let Some((p, st)) = self.service
-            && is_live(p, st)
+        // Only a verified service is signalled; both calls re-check its identity.
+        if let Some(v) = self.service
+            && is_live(v.0, v.1)
         {
-            send_signal(-(p as i32), SIGKILL);
-            send_signal(p as i32, SIGKILL);
+            let _ = signal_verified_group(v, SIGKILL);
+            let _ = signal_verified(v, SIGKILL);
         }
         self.write_sentinels();
     }

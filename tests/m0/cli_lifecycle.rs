@@ -3,7 +3,8 @@
 
 use super::common::{
     EXIT_DEADLINE, Finished, LogLine, Run, SIGINT, SIGKILL, SIGTERM, TempDir, await_ready,
-    child_lock_shared, fifo, is_live, send_signal, start_time, unit_toml, xrginit_bin,
+    child_lock_shared, fifo, guard_env, is_live, signal_verified, start_time, unit_toml,
+    verify_by_env, xrginit_bin,
 };
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -353,7 +354,10 @@ fn b_m0_015_killed_by_foreign_sigkill() {
     );
     let mut r = Run::unit(&p);
     let pid = r.wait_running();
-    assert!(send_signal(pid as i32, SIGKILL), "kill service");
+    // Panics, naming the pid, unless it was verified as xrginit's direct child.
+    if let Err(e) = r.signal_service(SIGKILL) {
+        panic!("kill service {pid}: {e}");
+    }
     let d = r.finish(EXIT_DEADLINE);
     let t = &d.text;
     assert_eq!(d.code, Some(1), "B-M0-015: exit code\n{t}");
@@ -628,13 +632,14 @@ fn b_m0_017_further_signals_during_stop_change_nothing() {
 
 // --- B-M0-019 -------------------------------------------------------------
 
+/// Kills a process verified by `verify_by_env` (never an unverified pid).
 struct KillOnDrop(Option<(u32, u64)>);
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
         if let Some((p, st)) = self.0
             && is_live(p, st)
         {
-            send_signal(p as i32, SIGKILL);
+            let _ = signal_verified((p, st), SIGKILL);
         }
     }
 }
@@ -650,14 +655,19 @@ fn b_m0_019_double_fork_grandchild_untracked() {
         "df.toml",
         &unit_toml("forker", &["/bin/sh", "-c", script, "sh", &pidfile], ""),
     );
-    let d = Run::unit(&p).finish(EXIT_DEADLINE);
+    // A unique environment entry (inherited per B-M0-024) lets the test verify that the
+    // pid in the pidfile is its own grandchild before it ever signals it.
+    let (gk, gv) = guard_env();
+    let mut c = Command::new(xrginit_bin());
+    c.arg("run").arg(&p).env(&gk, &gv).stdin(Stdio::null());
+    let d = Run::spawn(c).finish(EXIT_DEADLINE);
     let g: u32 = fs::read_to_string(&pidfile)
         .unwrap_or_else(|e| panic!("pidfile not written: {e}\n{}", d.text))
         .trim()
         .parse()
         .expect("grandchild pid");
     let gst = start_time(g);
-    let _guard = KillOnDrop(gst.map(|s| (g, s)));
+    let _guard = KillOnDrop(verify_by_env(g, &gk, &gv).ok());
     let alive = gst.is_some_and(|s| is_live(g, s));
     let t = &d.text;
     assert_eq!(d.code, Some(0), "B-M0-019: exit code\n{t}");

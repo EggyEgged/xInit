@@ -3,11 +3,12 @@ M0 red check and self-check (blind test author, 2026-11-22)
 
 1. Red check: main suite against the xinit-api stub
 ---------------------------------------------------
-Re-run 2026-11-22 after the fmt/clippy-only fix (no test, assertion or fixture changed):
+Re-run 2026-11-23 after the signal-safety and B-M0-023 fixes (section 4; no clause coverage,
+test name or expected value changed):
   cargo fmt --all --check                               exit 0
   cargo clippy --offline --all-targets -- -D warnings   exit 0
 Command:  cargo test --offline --test m0 -q -- --logfile <log>   (XRGINIT_BIN unset, no binary in the blind workspace)
-Compile:  clean, no errors or warnings ("Finished `test` profile ... Running tests/m0.rs")
+Compile:  clean, no errors or warnings
 Result:   running 111 tests; libtest log: 111 "failed" lines, 0 "ok" lines; 0 passed; 111 failed  (exit 101)
 
 Failure causes (runtime panics, no compile errors):
@@ -137,7 +138,7 @@ against real output in the self-check below.
 
 2. Red check: holdout suite ($XINIT_HOLDOUT_DIR = /home/egg/xinit-holdout/m0)
 -----------------------------------------------------------------------------
-Command:  cargo test --offline --locked --manifest-path /home/egg/xinit-holdout/m0/Cargo.toml
+Command:  cargo test --offline --manifest-path /home/egg/xinit-holdout/m0/Cargo.toml   (re-run 2026-11-23)
 Result:   tests/blackbox.rs: running 19 tests ... 0 passed; 19 failed
           each: panicked at tests/blackbox.rs:30:9: XRGINIT_BIN is not set: it must name the
           xrginit binary (absolute path); there is no fallback
@@ -168,3 +169,49 @@ W3 "a second SIGTERM/SIGINT during the stop forces SIGKILL at once":
   main: b_m0_017_further_signals_during_stop_change_nothing FAILS
         ("exited after 824µs, before the 5000 ms timeout"); the other 4 pass, as they should.
 Result: each wrong implementation is caught by at least one test; the control passes.
+
+4. Re-run 2026-11-23: signal safety (defect 1) and B-M0-023 flake (defect 2)
+---------------------------------------------------------------------------
+Defect 1. Every signal either suite sends now goes through one of:
+- xrginit itself: pidfd opened right after spawn, before the waiter thread can reap it.
+- a reported service pid: only if verify_child() saw it as a direct child of that xrginit
+  (stat field 4) with pid > 1; its start time (field 22) is recorded then and re-checked
+  after pidfd_open, and the signal goes through that pidfd.
+- the service's process group: same checks, plus field 5 == pid (it leads its group);
+  PIDFD_SIGNAL_PROCESS_GROUP, falling back to kill(-pgid) only on EINVAL with pgid > 1.
+  That fallback is the only raw kill() left in either suite.
+- the B-M0-019 grandchild (pid from the service's pidfile): only if its environ carries a
+  unique per-test guard entry and its start time is unchanged, then via pidfd.
+If the check fails, nothing is signalled. A test that needs the signal panics with
+"refusing to signal the service: pid Some(<n>) ...". Cleanup (Run::drop, Proc::drop,
+KillOnDrop) skips the signal silently.
+Sites: tests/common/mod.rs (Run::drop, signal_xrginit, signal_service[_group]),
+cli_lifecycle.rs (b_m0_015, KillOnDrop/b_m0_019), service_env.rs (b_m0_020 group kill),
+holdout blackbox.rs (Proc::drop, Proc::signal, holdout_b_m0_015, _019, _020_022).
+
+Defect 2. b_m0_023_only_fds_0_1_2_open (and the B-M0-023 part of the holdout's
+holdout_b_m0_021_023_024_027_process_state, now from a second run) read /proc/<P>/fd only
+after a FIFO readiness line. The service is
+  sh -c "trap 'kill $!; exit 0' TERM; (echo ready > \"$1\"; exec sleep ..) & wait"
+The readiness write happens in a forked subshell, so the service's own fd table is never
+touched, and the service has finished loading before it forks. No other test reads
+/proc/<P>/fd. The other /proc reads after the running line (cmdline, exe, signal masks,
+pgrp/sid, ids, cwd, environ) are all fixed at exec, so they cannot race the loader.
+
+Self-check. Fakes in /tmp/xinit-scratch/fake2 (deleted afterwards): xrginit-pid1 and xrginit-pid0
+log `state=starting` and then `state=running pid=1` (or `pid=0`) in B-M0-028 format, and
+then wait forever. Each fake first starts a canary `/usr/bin/sleep 599.5` in its own
+process group: kill(-1) would kill the canary, and kill(0) would kill the test process.
+  cargo --config 'env.XRGINIT_BIN=".../xrginit-pid{1,0}"' --config 'env.FAKE_CANARY_DIR=...' \
+    test --offline --test m0 -- b_m0_013 b_m0_015 b_m0_017 b_m0_018 b_m0_019 b_m0_020 \
+    b_m0_021 b_m0_022 b_m0_023 b_m0_024 b_m0_026_cli_same b_m0_027
+  main  pid=1: 17 tests, 0 passed, 17 failed; canaries 17 alive of 17
+  main  pid=0: 17 tests, 0 passed, 17 failed; canaries 17 alive of 17
+  holdout (holdout_b_m0_015 _017 _018 _019 _020 _021 _027):
+        pid=1: 8 tests, 0 passed, 8 failed; canaries 9 alive of 9
+        pid=0: 8 tests, 0 passed, 8 failed; canaries 8 alive of 8
+  b_m0_015 and holdout_b_m0_015 (both fakes), and b_m0_020 and holdout_b_m0_020_022
+  (pid=1; with pid=0 they fail earlier, reading /proc/0/cmdline), failed with "refusing to signal the service: pid Some(1|0)
+  ... not ... a direct child of xrginit <n>". The others failed earlier, on their own
+  assertions. The test harness survived every run, and every canary was alive afterwards,
+  so no kill() reached group -1 or the test's own group.
