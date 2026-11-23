@@ -50,7 +50,10 @@ Setup checks, 2026-11-22: main clean and equal to origin/main (77b8833); gh auth
 | 2026-11-22 | M0 | test author (fix re-run) | 0 | fmt + 8 clippy fixes, behaviour-preserving (diffed against rustfmt of the original); red still 0/111. Re-frozen ea26a99, merged into m0/impl; gate PASSED 114/0. |
 | 2026-11-22 | M0 | reviewer (round 1) | 0 | No blockers; 1 major: public `impl AsFd for Service` not in the spec (exposes the private pidfd). |
 | 2026-11-22 | M0 | implementer (review round 1) | 0 | 1a1fe49 removes the AsFd impl; CLI opens its own pidfd. Gate PASSED 114/0; holdout 19/19 (autopilot). |
-| 2026-11-22 | M0 | hardening | - | NOT RUN: cargo-mutants is not installed; installing it needs a download and a write to ~/.cargo. Waiting for the user. |
+| 2026-11-22 | M0 | hardening | - | Paused: cargo-mutants was not installed. User approved the install (v27.1.0); mutation scripts added in PR #5. |
+| 2026-11-22 | M0 | mutation run (2 attempts) | - | Both killed the user's desktop session. Cause: mutant `Service::pid -> 1` made the test cleanup run kill(-1, SIGKILL) (tests/common/mod.rs Run::drop). Mutation runs sandboxed in a user+PID namespace (PR #6). |
+| 2026-11-22 | M0 | test author (safety, run 1) | 1 | Usage limit after 55 turns; draft edits kept in ../xinit-blind and the holdout. Ran inside the PID-namespace sandbox. |
+| 2026-11-23 | M0 | test author (safety, run 2) | 0 | Continued the draft in the same (stub-only) blind workspace. All signals now go through pidfds to xrginit or verified direct children; nothing <= 1. B-M0-023 reads fds after FIFO readiness (the loader briefly holds fd 3). Self-check vs pid=1/pid=0 fakes: all affected tests fail, 51/51 sentinels survive. Re-frozen 67583c6. Gate (sandbox) PASSED 114/0; holdout 19/19. |
 
 ### Spec notes from the M0 test author (not blocking, not OPEN)
 1. B-M0-026: a root-only success test and the unprivileged EPERM test cannot both pass in one environment. The root test is omitted and listed Untested.
